@@ -1,0 +1,72 @@
+CREATE TABLE mb_queue(
+-- Primary key
+mbq_id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+
+-- mb_text.mbt_id of the row containing the revision text
+mbq_text_id INT UNSIGNED NOT NULL DEFAULT 0,
+
+-- action to take
+mbq_action VARCHAR(255) BINARY NOT NULL DEFAULT '',
+-- push timestamp
+mbq_push_timestamp varbinary(14) NOT NULL DEFAULT '',
+-- status
+mbq_status VARCHAR(255) BINARY NOT NULL DEFAULT '',
+
+--  log_comment, rc_comment, rev_comment; comment (from api rc)
+mbq_comment VARCHAR(255) BINARY NOT NULL DEFAULT '',
+-- rc_contentmodel, rev_contentmodel; contentmodel (from api rc)
+mbq_content_model varbinary(32) DEFAULT NULL,
+-- rev_len, rc_new_len; newlen (from api rc)
+mbq_len INT,
+-- log_action, rc_logaction; logaction (from api rc)
+mbq_log_action varbinary(255) NULL DEFAULT NULL,
+-- log_id, rc_logid; logid (from api rc)
+mbq_log_id INT UNSIGNED NOT NULL,
+-- log_params, rc_params (from api rc)
+mbq_log_params blob NULL,
+-- log_type, rc_logtype; logtype (from api rc)
+mbq_log_type varbinary(32) NOT NULL DEFAULT '',
+-- rc_minor, rev_minor; minor (from api rc)
+mbq_minor tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- log_namespace, page_namespace, rc_namespace, rev_namespace; ns (from api rc)
+mbq_namespace INT NOT NULL DEFAULT 0,
+-- page_id, rc_cur_id, rev_page; pageid (from api rc)
+mbq_page_id int unsigned NOT NULL,
+-- rc_this_oldid, rev_id; revid (from api rc)
+mbq_rev_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- timestamp
+mbq_timestamp varbinary(14) NOT NULL DEFAULT '',
+-- log_title, page_title, rc_title, title (512, because it is prefixed by the namespace)
+mbq_title VARCHAR(512) BINARY NOT NULL DEFAULT '',
+-- log_user, rc_user, rev_user
+mbq_user INT UNSIGNED NOT NULL DEFAULT 0,
+-- log_user_text, rc_user_text, rev_user_text, user_text
+mbq_user_text VARCHAR(255) BINARY NOT NULL,
+
+-- rc_anon (from api rc)
+mbq_rc_anon tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- bot
+mbq_rc_bot tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- id
+mbq_rc_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- revoldid
+mbq_rc_lastoldidid INT UNSIGNED NOT NULL DEFAULT 0,
+-- new
+mbq_rc_new tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- oldlen
+mbq_rc_old_len INT,
+-- patrolled
+mbq_rc_patrolled tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- source
+mbq_rc_source varchar(16) binary not null default '',
+-- type
+mbq_rc_type varbinary(255) NULL DEFAULT NULL,
+
+-- rev_sha1; sha1 (from api rev)
+mbq_rev_sha1 varbinary(32) NOT NULL DEFAULT '',
+
+-- page_is_redirect (from api rc) (not used)
+mbq_page_is_redirect tinyint UNSIGNED NOT NULL DEFAULT 0,
+-- tags (from api rc); not used for anything
+mbq_tags VARCHAR(255) BINARY NOT NULL DEFAULT ''
+);
