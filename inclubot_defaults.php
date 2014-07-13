@@ -11,6 +11,7 @@ $defaultMicroseconds = array(
     )
 );
 $botClassesPath = "/home/nathan/Chris-G-botclasses";
+$passwordPath = "/home/nathan/MirrorBot/passwords/";
 $tables = array(
     'mb_queue' => 'mb-queue.sql',
     'mb_text' => 'mb-text.sql',

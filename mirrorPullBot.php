@@ -56,7 +56,6 @@ if ( !in_array ( $options[ 'r' ], $allowableOptions['r'] ) ) {
 }
 $startingTimestamp = '';
 if ( isset ( $options['s'] ) ) {
-      #echo $options['s'];
       if ( is_numeric ( $options['s'] ) ) {
             if ( $options['s'] < 10000000000000 || $options['s'] > 30000000000000 ) {
                   die ( "Error: Timestamp must be after C.E. 1000 and before C.E. 3000\n" );
@@ -67,62 +66,10 @@ if ( isset ( $options['s'] ) ) {
       $startingTimestamp = $options['s'];
 }
 
-// Get the passwords
-$passwordFile = 'inclubot_passwords.php';
-if ( !file_exists ( $passwordFile ) ) {
-      die ( "File $passwordFile does not exist\n" );
-}
-include( 'inclubot_passwords.php' );
+include( 'mirrorInitializeDb.php' );
 
-// Get the defaults
-$defaultsFile = 'inclubot_defaults.php';
-if ( !file_exists ( $defaultsFile ) ) {
-      die ( "File $defaultsFile does not exist\n" );
-}
-include( 'inclubot_defaults.php' );
 if ( $options['r'] == 'd' ) {
       $sleepMicroseconds = $defaultMicroseconds['pull'][$options['q']];
-}
-
-// Prepare failure log file
-$failures = fopen ( $failureLogFile, 'a' );
-
-// Connect to database
-$con = new mysqli( $host, $dbUser, $dbPass );
-if ( !$con ) {
-      die( 'Could not connect: ' . mysql_error() );
-}
-
-// Create database and select it
-$con->query ( "CREATE DATABASE IF NOT EXISTS $dbName" );
-$con->select_db ( "$dbName" );
-
-$existenceArr = array();
-$existenceResult = $con->prepare( "SHOW TABLES FROM $dbName" );
-$existenceResult->execute();
-$existenceResult->bind_result( $existenceRow );
-if ( !$existenceResult ) {
-      die( "Could not show tables from $dbName" );
-}
-while( $existenceResult->fetch() ) {
-      $existenceArr[] = $existenceRow;
-}
-foreach ( $tables as $table => $sqlFile ) {
-      echo "Checking table $table...";
-      if ( in_array ( $table, $existenceArr ) ) {
-            echo "table exists\n";
-      } else {
-            echo "not found; creating...";
-            if ( !file_exists( $sqlFile ) ) {
-                  die( "Error: file $sqlFile missing!\n" );
-            }
-            $sql = file_get_contents ( $sqlFile );
-            $conResult = $con->query ( $sql );
-            if ( !$conResult ) {
-                  die( "failed!\n" );
-            }
-            echo "done.\n";
-      }
 }
 
 /* Setup my classes. */
