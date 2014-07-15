@@ -58,9 +58,3 @@ $dbDefaults = array(
     'mbq_page_is_redirect' => 0,
     'mbq_tags' => "''"
 );
-$mirrorActions = array(
-    'newusers' => 'mirrorcreateuser',
-    'create2' => 'mirrorcreateuser',
-    'move' => 'mirrormove',
-    'delete' => 'mirrordelete'
-);

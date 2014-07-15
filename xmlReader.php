@@ -43,7 +43,7 @@ while($reader->read()) {
             $whichMostRecent = 'logitem';
         }
     }
-        if($reader->nodeType == XMLReader::TEXT ) {
+        if( $reader->nodeType == XMLReader::TEXT ) {
             // ID can be either log_id or log_user
             if ( $nodeName == 'id' ) {
                 if ( $whichMostRecent == 'contributor' ) {
@@ -63,11 +63,7 @@ while($reader->read()) {
             }
             
             // Log actions should be saved in the appropriate mb_action
-            if ( $nodeName == 'action' ) {
-                if ( isset( $mirrorActions[$reader->value] ) ) {
-                    $dbArray[$log_id]['mbq_action'] = $mirrorActions[$reader->value];
-                }
-            }
+            $dbArray[$log_id]['mbq_action'] = 'mirrorlogentry';
  
             // Save the data to the array
             if( isset( $array[$nodeName] ) ) {
@@ -95,20 +91,21 @@ while($reader->read()) {
                 }
                 $values .= $value;
             }
-            #echo $values;
             $ret = $db->query( "SELECT * FROM mb_queue "
                 . "WHERE mbq_log_id=$log_id" );
             if ( !$ret || !$ret->num_rows ) {
                 $query = "INSERT INTO mb_queue ($fields) "
                     . " values ($values)";
-                    #echo $query . "\n";
                 $result = $db->query( $query );
                 if ( !$result ) {
                     echo "Failed: $query\n";
-                    #echo 'Failed! ';
                     var_dump( $db->error_list );
                     echo "\n";
+                } else {
+                    echo "Inserted: $log_id\n";
                 }
+            } else {
+                echo "Log id $log_id already in database; skipping\n";
             }
         }
     }

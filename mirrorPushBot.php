@@ -61,6 +61,7 @@ $wiki->setUserAgent( $userAgent );
 $wiki->url = $localWikiUrl;
 $wiki->login( $pushUser, $pushPass );
 $token = urlencode ( $wiki->getedittoken() );
+#$token = $wiki->getedittoken();
 
 $keepGoing = true;
 while ( $keepGoing ) {
@@ -71,19 +72,9 @@ while ( $keepGoing ) {
       $row = $mbRet->fetch_assoc();
       $action = $row['mbq_action'];
       $pushMapping = null;
-      if ( $row['mbq_action'] == 'mirrorcreateuser' ) {
-            $pushMapping = getMirrorCreateUserPushMapping( $row );
-            if ( $row['mbq_log_type'] == 'create2' ) {
-                  $data = @unserialize( $row['mbq_log_params'] );
-                  if ( isset( $data["4::userid"] ) ) {
-                        $row['mbq_user'] = $data["4::userid"];
-                  }
-                  if ( substr( $row['mbq_user_text'], 0, 5 ) == 'User:' ) {
-                  $row['mbq_user_text'] = substr( $row['mbq_title'], 5,
-                       strlen ( $row['mbq_title'] ) - 5 );
-                  }
-            }
-            $row['password'] = randomPassword();
+      if ( $row['mbq_action'] == 'mirrorlogentry' ) {
+            $pushMapping = getMirrorLogEntryPushMapping( $row );
+            $row['mbq_user'] = '0';
       }
       if ( !$pushMapping ) {
             $db->query ( "UPDATE mb_queue SET mbq_status='Ignore'"
@@ -92,11 +83,10 @@ while ( $keepGoing ) {
       }
       $query = "?action=$action&format=php&token=$token";
       foreach( $pushMapping as $pushMappingKey => $pushMappingValue ) {
-            if ( $pushMappingValue != '' ) {
+            if ( $row[$pushMappingValue] != '' ) {
                   $query .= "&$pushMappingKey=" . ( urlencode( $row[$pushMappingValue] ) );
             }
       }
-      #die();
       $localRet = $wiki->query ( $query, true,
             'Content-Type: application/x-www-form-urlencoded' ); // POST
       var_dump ( $localRet );
@@ -107,7 +97,7 @@ while ( $keepGoing ) {
             die( "The $localWikiName API returned an error message!\n" );
       }
       $pushStatusQuery = "UPDATE mb_queue SET mbq_status='Pushed', mbq_push_timestamp='"
-            . $localRet['mirrorcreateuser']['timestamp']
+            . $localRet['mirrorlogentry']['timestamp']
             . "' WHERE mbq_id=" . $row['mbq_id'];
       echo $pushStatusQuery . "\n";
       $pushResult = $db->query ( $pushStatusQuery );
@@ -117,18 +107,13 @@ while ( $keepGoing ) {
       }
 }
             
-function getMirrorCreateUserPushMapping( $row ) {
+function getMirrorLogEntryPushMapping( $row ) {
       $pushMapping = array(
-            'userid' => 'mbq_user',
-            'username' => 'mbq_user_text',
-	    'usertouched' => 'mbq_timestamp',
-            'userregistration' => 'mbq_timestamp',
-            'userpassword' => 'password',
 	    'logid' => 'mbq_log_id',
 	    'logtype' => 'mbq_log_type',
 	    'logaction' => 'mbq_log_action',
 	    'logtimestamp' => 'mbq_timestamp',
-	    'loguser' => 'mbq_user',
+	    'loguser' => 'mbq_user', // This will actually be left as zero
 	    'lognamespace' => 'mbq_namespace',
 	    'logusertext' => 'mbq_user_text',
 	    'logtitle' => 'mbq_title',
@@ -158,15 +143,4 @@ function getMirrorEditPushMapping ( $row ) {
             'tags' => 'mbrcq_tags',
       );
       return $pushMapping;
-}
-
-function randomPassword() {
-    $alphabet = "abcdefghijklmnopqrstuwxyzABCDEFGHIJKLMNOPQRSTUWXYZ0123456789";
-    $pass = array(); //remember to declare $pass as an array
-    $alphaLength = strlen($alphabet) - 1; //put the length -1 in cache
-    for ($i = 0; $i < 8; $i++) {
-        $n = rand(0, $alphaLength);
-        $pass[] = $alphabet[$n];
-    }
-    return implode($pass); //turn the array into a string
 }
