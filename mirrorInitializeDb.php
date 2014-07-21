@@ -13,9 +13,6 @@ if ( !file_exists ( $passwordFile ) ) {
 }
 include( $passwordFile );
 
-// Prepare failure log file
-$failures = fopen ( $failureLogFile, 'a' );
-
 // Connect to database
 $db = new mysqli( $host, $dbUser, $dbPass );
 if ( !$db ) {
@@ -69,5 +66,24 @@ foreach ( $tables as $table => $sqlFile ) {
                         echo "done.\n";
                   }
             }
+      }
+}
+
+function logFailure ( $contents ) {
+      // Prepare failure log file
+      global $failureLogFile;
+      $failures = fopen ( $failureLogFile, 'a' );
+      ob_start();
+      if ( is_array( $contents ) ) {
+            var_dump ( $contents );
+      } else {
+            echo $contents;
+      }
+      $writeThis = ob_get_clean();
+      fwrite ( $failures, $writeThis );
+      if ( is_array( $contents ) ) {
+            var_dump ( $contents );
+      } else {
+            echo $contents;
       }
 }

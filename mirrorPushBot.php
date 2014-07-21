@@ -61,34 +61,59 @@ $wiki->setUserAgent( $userAgent );
 $wiki->url = $localWikiUrl;
 $wiki->login( $pushUser, $pushPass );
 $token = urlencode ( $wiki->getedittoken() );
-#$token = $wiki->getedittoken();
+$wiki->__set('quiet','soft'); // Some long URLs will cause problems
 
 $keepGoing = true;
+$offset = 0;
 while ( $keepGoing ) {
-      $mbRet = $db->query( "SELECT * FROM mb_queue WHERE mbq_status='' LIMIT 1" );
+      $query = "SELECT * FROM mb_queue WHERE mbq_status='readytopush' LIMIT 1";
+      if ( $offset > 0 ) {
+            $query .= " OFFSET $offset";
+      }
+      $mbRet = $db->query( $query );
       if ( !$mbRet || !$mbRet->num_rows ) {
-            break;
+            die( "No more rows to push!\n");
       }
       $row = $mbRet->fetch_assoc();
       $action = $row['mbq_action'];
       $pushMapping = null;
-      if ( $row['mbq_action'] == 'mirrorlogentry' ) {
-            $pushMapping = getMirrorLogEntryPushMapping( $row );
-            $row['mbq_user'] = '0';
+      $continueThis = false;
+      $data = array();
+      switch ( $row['mbq_action'] ) {
+            case 'mirrorlogentry':
+                  $pushMapping = getMirrorLogEntryPushMapping( $row );
+                  $row['mbq_user'] = '0';
+                  break;
+            case 'mirroredit':
+                  $pushMapping = getMirrorEditPushMapping( $row );
+                  $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id'];
+                  $textRet = $db->query( $query );
+                  if ( !$textRet || !$textRet->num_rows ) {
+                        die( "mbt_id " . $row['mbq_text_id'] . " not found in mb_text!\n" );
+                  }
+                  $textRow = $textRet->fetch_assoc();
+                  $data['oldtext'] = $textRow['mbt_text'];
+                  break;
+            default:
+                  $offset = $row['mbq_id'];
+                  #$offset++;
+                  #echo $offset;
+                  $continueThis = true;
       }
-      if ( !$pushMapping ) {
-            $db->query ( "UPDATE mb_queue SET mbq_status='Ignore'"
-            . " WHERE mbq_id=" . $row['mbq_id'] );
-            continue;
+      if ( $continueThis ) {
+            $continue;
       }
       $query = "?action=$action&format=php&token=$token";
       foreach( $pushMapping as $pushMappingKey => $pushMappingValue ) {
-            if ( $row[$pushMappingValue] != '' ) {
-                  $query .= "&$pushMappingKey=" . ( urlencode( $row[$pushMappingValue] ) );
-            }
+            #if ( $row[$pushMappingValue] != '' ) {
+                  #$query .= "&$pushMappingKey=" . ( urlencode( $row[$pushMappingValue] ) );
+                  $data[$pushMappingKey] = $row[$pushMappingValue];
+            #}
       }
-      $localRet = $wiki->query ( $query, true,
-            'Content-Type: application/x-www-form-urlencoded' ); // POST
+      
+      $localRet = $wiki->query ( $query, $data
+            #,'Content-Type: application/x-www-form-urlencoded'
+            ); // POST
       var_dump ( $localRet );
       if ( !$localRet ) {
             die ( "Nothing was returned\n" );
@@ -96,8 +121,14 @@ while ( $keepGoing ) {
       if ( isset( $localRet['error' ] ) ) {
             die( "The $localWikiName API returned an error message!\n" );
       }
-      $pushStatusQuery = "UPDATE mb_queue SET mbq_status='Pushed', mbq_push_timestamp='"
-            . $localRet['mirrorlogentry']['timestamp']
+      if ( isset( $localRet['mirrorlogentry']['timestamp'] ) ) {
+            $pushTimestamp = $localRet['mirrorlogentry']['timestamp'];
+      }
+      if ( isset( $localRet['mirroredit']['timestamp'] ) ) {
+            $pushTimestamp = $localRet['mirroreditpage']['timestamp'];
+      }
+      $pushStatusQuery = "UPDATE mb_queue SET mbq_status='pushed', mbq_push_timestamp='"
+            . $pushTimestamp
             . "' WHERE mbq_id=" . $row['mbq_id'];
       echo $pushStatusQuery . "\n";
       $pushResult = $db->query ( $pushStatusQuery );
@@ -119,28 +150,36 @@ function getMirrorLogEntryPushMapping( $row ) {
 	    'logtitle' => 'mbq_title',
 	    'logcomment' => 'mbq_comment',
 	    'logparams' => 'mbq_log_params',
-	    'logpage' => 'mbq_page_id'
+	    'logpage' => 'mbq_page_id',
+            'logdeleted' => 'mbq_deleted',
+            'tstags' => 'mbq_tags'
       );
       return $pushMapping;
 }
 
 function getMirrorEditPushMapping ( $row ) {
       $pushMapping = array(
-            'pageid' => 'mb_rc_cur_id',
-            'text' => 'mbrcq_text',
-            'summary' => 'mbrcq_rc_comment',
-            'minor' => 'mbrcq_rc_minor',
-            'bot' => 'mbrcq_rc_bot',
-            'title' => 'mbrcq_rc_title',
-            'namespace' => 'mbrcq_rc_namespace',
-            'contentmodel' => 'mbrcq_content_model',
-            'rcid' => 'mbrcq_rc_id',
-            'revid' => 'mbrcq_rc_thisoldid',
-            'user' => 'mbrcq_rc_user_text',
-            'userid' => 'mbrcq_rc_user',
-            'timestamp' => 'mbrcq_rc_timestamp',
-            'comment' => 'mbrcq_rc_comment',
-            'tags' => 'mbrcq_tags',
+            'revid' => 'mbq_rev_id',
+            'revpage' => 'mbq_page_id',
+            'revcomment' => 'mbq_comment',
+            'revuser' => 'mbq_user',
+            'revusertext' => 'mbq_user_text',
+            'revtimestamp' => 'mbq_timestamp',
+            'revminoredit' => 'mbq_minor',
+            'revlen' => 'mbq_len',
+            'revsha1' => 'mbq_rev_sha1',
+            'revcontentmodel' => 'mbq_rev_content_model',
+            'revcontentformat' => 'mbq_rev_content_format',
+            'revdeleted' => 'mbq_deleted',
+            'rcid' => 'mbq_rc_id',
+            'rcnamespace' => 'mbq_namespace',
+            'rctitle' => 'mbq_title',
+            'rcbot' => 'mbq_rc_bot',
+            'rcnew' => 'mbq_rc_new',
+            'rctype' => 'mbq_rc_type',
+            'rcsource' => 'mbq_rc_source',
+            'rcpatrolled' => 'mbq_rc_patrolled',
+            'tstags' => 'mbq_tags'
       );
       return $pushMapping;
 }

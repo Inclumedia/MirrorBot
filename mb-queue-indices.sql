@@ -1,1 +1,1 @@
-CREATE INDEX mbq_push_timestamp ON mb_queue (mbq_push_timestamp);
+CREATE INDEX mbq_status ON mb_queue (mbq_push_timestamp);

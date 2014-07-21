@@ -12,10 +12,10 @@ mbq_push_timestamp varbinary(14) NOT NULL DEFAULT '',
 -- status
 mbq_status VARCHAR(255) BINARY NOT NULL DEFAULT '',
 
---  log_comment, rc_comment, rev_comment; comment (from api rc)
+-- log_comment, rc_comment, rev_comment; comment (from api rc)
 mbq_comment VARCHAR(255) BINARY NOT NULL DEFAULT '',
--- rc_contentmodel, rev_contentmodel; contentmodel (from api rc)
-mbq_content_model varbinary(32) DEFAULT NULL,
+-- log_deleted, rc_deleted, rev_deleted
+mbq_deleted tinyint unsigned NOT NULL default 0,
 -- rev_len, rc_new_len; newlen (from api rc)
 mbq_len INT,
 -- log_action, rc_logaction; logaction (from api rc)
@@ -34,7 +34,7 @@ mbq_namespace INT NOT NULL DEFAULT 0,
 mbq_page_id int unsigned NOT NULL,
 -- rc_this_oldid, rev_id; revid (from api rc)
 mbq_rev_id INT UNSIGNED NOT NULL DEFAULT 0,
--- timestamp
+-- log_timestamp, rc_timestamp, rev_timestamp; timestamp
 mbq_timestamp varbinary(14) NOT NULL DEFAULT '',
 -- log_title, page_title, rc_title, title (512, because it is prefixed by the namespace)
 mbq_title VARCHAR(512) BINARY NOT NULL DEFAULT '',
@@ -49,8 +49,10 @@ mbq_rc_anon tinyint UNSIGNED NOT NULL DEFAULT 0,
 mbq_rc_bot tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- id
 mbq_rc_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- ip
+mbq_rc_ip varbinary(40) NOT NULL default '',
 -- revoldid
-mbq_rc_lastoldidid INT UNSIGNED NOT NULL DEFAULT 0,
+mbq_rc_last_oldidid INT UNSIGNED NOT NULL DEFAULT 0,
 -- new
 mbq_rc_new tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- oldlen
@@ -62,6 +64,10 @@ mbq_rc_source varchar(16) binary not null default '',
 -- type
 mbq_rc_type varbinary(255) NULL DEFAULT NULL,
 
+-- rev_content_model; contentmodel (from api rc)
+mbq_rev_content_model varbinary(32) DEFAULT NULL,
+-- rev_content_format; contentformat (from api rc)
+mbq_rev_content_format varbinary(64) DEFAULT NULL,
 -- rev_sha1; sha1 (from api rev)
 mbq_rev_sha1 varbinary(32) NOT NULL DEFAULT '',
 

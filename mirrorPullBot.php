@@ -21,17 +21,21 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-// "q" (queue) Three options: -qrc, -qrev, qus
+// Initialize database
+include( 'mirrorInitializeDb.php' );
+
+// "q" (queue) Four options: -qrc, -qrev, qus, qrcrev (rc and rev)
 // "r" (repeat) Three options: -ro (onetime), -rd (continuous, using defaults),
 // r<number of microsecs to sleep>
 // "s" starting timestamp
-$usage = 'Usage: php mirrorpullbot.php -q<option (e.g. rc, rev, us)> '
+$usage = 'Usage: php mirrorpullbot.php -q<option (e.g. rc, rev, us, sw)> '
       . '[-r<option (e.g. ro, rd, r<microseconds>>] [-s<starting (e.g. 20120101000000)>])' . "\n";
 $options = getopt( 'q:r:s:');
 $allowableOptions['q'] = array(
       'rc',
       'rev',
-      'us'
+      'us',
+      'rcrev'
 );
 $allowableOptions['r'] = array(
       'o',
@@ -66,14 +70,12 @@ if ( isset ( $options['s'] ) ) {
       $startingTimestamp = $options['s'];
 }
 
-include( 'mirrorInitializeDb.php' );
-
 if ( $options['r'] == 'd' ) {
       $sleepMicroseconds = $defaultMicroseconds['pull'][$options['q']];
 }
 
 /* Setup my classes. */
-include( 'botclasses.php' );
+require_once("$botClassesPath/botclasses.php");
 $wiki      = new wikipedia;
 $wiki->url = $remoteWikiUrl;
 
@@ -85,9 +87,13 @@ $rcContinue = '';
 $rcStart = '';
 $continueValue = '';
 $skip = false;
+$optionThisTime = $options['q'];
 while ( $options['r'] != 'o' || !$passes ) {
       $passes++;
-      switch ( $options['q'] ) {
+      if ( $optionThisTime == 'rcrev' ) {
+            $optionThisTime = 'rev';
+      }
+      switch ( $optionThisTime ) {
             case 'rc':
                   // Get starting timestamp, from the default if necessary
                   if ( $passes == 1 ) {
@@ -95,7 +101,7 @@ while ( $options['r'] != 'o' || !$passes ) {
                               $startingTimestamp = $defaultStart['rc'];
                         }
                         $rcStart = "&rcstart=$startingTimestamp";
-                        $continueResult = $con->query( 'SELECT * FROM mb_cursor WHERE'
+                        $continueResult = $db->query( 'SELECT * FROM mb_cursor WHERE'
                               . " mbc_key='rccontinue'" );
                         if ( $continueResult ) {
                               $continueValueArr = $continueResult->fetch_assoc();
@@ -124,97 +130,147 @@ while ( $options['r'] != 'o' || !$passes ) {
                         break;
                   }
                   $events = $ret['query']['recentchanges'];
-                  $table = 'mb_rc_queue';
-                  $fields = array (
-                        'mbrcq_rc_id' => 'rcid',
-                        'mbrcq_anon' => 'anon',
-                        'mbrcq_rc_bot' => 'bot',
-                        'mbrcq_rc_comment' => 'comment',
-                        'mbrcq_rc_log_action' => 'logaction',
-                        'mbrcq_rc_logid' => 'logid',
-                        'mbrcq_rc_logtype' => 'logtype',
-                        'mbrcq_rc_minor' => 'minor',
-                        'mbrcq_rc_new' => 'new',
-                        'mbrcq_rc_new_len' => 'newlen',
-                        'mbrcq_rc_namespace' => 'ns',
-                        'mbrcq_rc_old_len' => 'oldlen',
-                        'mbrcq_rc_cur_id' => 'pageid',
-                        'mbrcq_rc_patrolled' => 'patrolled',
-                        'mbrcq_rc_thisoldid' => 'revid',
-                        'mbrcq_rc_lastoldidid' => 'revoldid',
-                        'mbrcq_redirect' => 'redirect',
-                        'mbrcq_rc_timestamp' => 'timestamp',
-                        'mbrcq_rc_title' => 'title',
-                        'mbrcq_rc_type' => 'type',
-                        'mbrcq_sha1' => 'sha1',
-                        'mbrcq_rc_user' => 'userid',
-                        'mbrcq_rc_user_text' => 'user',
-                        'mbrcq_user' => 'addeduserid', // This isn't actually in the API result
-                        'mbrcq_user_text' => 'addeduser' // This isn't actually in the API result
-                  );
-                  $stringFields = array (
-                        'title',
-                        'type',
-                        'action',
-                        'user',
-                        'comment',
-                        'tags',
-                        'logaction',
-                        'logtype',
-                        'addeduser',
-                        'sha1'
-                  );
-                  $booleanFields = array (
-                        'anon',
-                        'bot',
-                        'minor',
-                        'new',
-                        'patrolled',
-                        'redirect',
-                  );
-                  $defaultFields = array (
-                        'rcid' => 0,
-                        'anon' => 0,
-                        'bot' => 0,
-                        'comment' => "''",
-                        'logaction' => 'NULL',
-                        'logid' => 0,
-                        'logtype' => "''",
-                        'minor' => 0,
-                        'new' => 0,
-                        'newlen' => 0,
-                        'ns' => 0,
-                        'oldlen' => 0,
-                        'pageid' => 0,
-                        'patrolled' => 0,
-                        'revid' => 0,
-                        'revoldid' => 0,
-                        'redirect' => 0,
-                        'timestamp' => "''",
-                        'title' => "''",
-                        'type' => 'NULL',
-                        'user' => "''",
-                        'userid' => 0,
-                        'addeduser' => "''",
-                        'addeduserid' => 0,
-                        'sha1' => "''"
-                  );
+                  $table = 'mb_queue';
+                  $dbFields = array_keys ( $fields['rc'] );
+                  $userRow = array_values ( $fields['rc'] );
+                  $undesirables = array ( '-', ':', 'T', 'Z' );
+                  $row = 'insert into ' . $table . ' ( ' . implode ( ', ', $dbFields ) . ' ) values ';
+                  $isFirstInEvent = true;
+                  $events = $ret['query']['recentchanges'];
+                  // For each user creation event in that result set
+                  if ( $skip ) {
+                        array_shift( $events );
+                  }
+                  foreach ( $events as $thisLogevent ) {
+                        $deleted = 0;
+                        if ( !$isFirstInEvent ) {
+                              $row .= ', ';
+                        }
+                        $isFirstInEvent = false;
+                        $row .= '( ';
+                        $isFirstInItem = true;
+                        // Get rid of dashes, colons, Ts and Zs in timestamp
+                        $thisLogevent['timestamp'] = str_replace ( $undesirables, '',
+                              $thisLogevent['timestamp'] );
+                        if ( isset( $thisLogevent['type'] ) ) {
+                              if ( $thisLogevent['type'] == 'edit'
+                                    || $thisLogevent['type'] == 'new' ) {
+                                    $thisLogevent['mbqaction'] = 'mirroredit';
+                                    $thisLogevent['mbqstatus'] = 'needsrev';
+                              }
+                        }
+                        if ( isset( $thisLogevent['logtype'] ) ) {
+                              if ( isset( $mirrorActions[$thisLogevent['logtype']] ) ) {
+                                    if ( $thisLogevent['timestamp'] > $importCutoff ) {
+                                          $thisLogevent['mbqaction'] =
+                                                $mirrorActions[$thisLogevent['logtype']];
+                                    } else {
+                                          $thisLogevent['mbqaction'] = 'mirrorlogentry';
+                                    }
+                                    $thisLogevent['mbqstatus'] = 'readytopush';
+                              }
+                              if ( isset( $thisLogevent['actionhidden'] ) ) {
+                                    $deleted++;
+                              }
+                              if ( isset( $thisLogevent['commenthidden'] ) ) {
+                                    $deleted += 2;
+                              }
+                              if ( isset( $thisLogevent['userhidden'] ) ) {
+                                    $deleted += 4;
+                              }
+                              $thisLogevent['mbqdeleted'] = $deleted;
+                        }
+                        if ( isset( $thisLogevent['ip'] ) ) {
+                              $thisLogevent['mbqrcip'] = $thisLogevent['usertext'];
+                        }
+                        // Iterate over those database fields
+                        foreach ( $userRow as $thisRowItem ) {
+                              if ( !$isFirstInItem ) {
+                                    $row .= ', ';
+                              }
+                              $isFirstInItem = false;
+                              // If it's a boolean field, 1 if it's there, 0 if not
+                              if ( in_array( $thisRowItem, $booleanFields['rc'] ) ) {
+                                    if ( isset ( $thisLogevent[ $thisRowItem ] ) ) {
+                                          $row .= '1';
+                                    } else {
+                                          $row .= '0';
+                                    }
+                              } else {
+                                    if ( isset ( $thisLogevent[$thisRowItem] ) ) {
+                                          // If it's an array (e.g. tag array), implode it
+                                          if ( is_array ( $thisLogevent[$thisRowItem] ) ) {
+                                                $thisLogevent[$thisRowItem] = implode ( $thisLogevent[$thisRowItem] );
+                                          }
+                                          // If it's a string field, escape it
+                                          if ( in_array ( $thisRowItem, $stringFields['rc'] ) ) {
+                                                $thisLogevent[$thisRowItem] = "'" . $db->real_escape_string
+                                                      ( $thisLogevent[$thisRowItem] ) . "'";
+                                          }
+                                          $row .= $thisLogevent[$thisRowItem];
+                                    } else {
+                                          $row .= $defaultFields['rc'][$thisRowItem];
+                                    }
+                              }
+                        }
+                        $provisionalRccontinue = 'Y' . $thisLogevent['timestamp'] . $thisLogevent['rcid'];
+                        $row .= ')';
+                  }
+                  $row .= ';';
+                  #echo $row . "\n";
+                  $queryResult = $db->query ( $row );
+                  if ( $queryResult ) {
+                        echo "Inserted data successfully!\n";
+                        if ( !$rcContinue ) {
+                              $rcContinue = $provisionalRccontinue;
+                              $skip = true;
+                        } else {
+                              $skip = false;
+                        }
+                        // Check cursor existence; if it doesn't, then create one
+                        $exist = $db->query( 'SELECT * FROM mb_cursor WHERE'
+                              . " mbc_key='rccontinue'");
+                        if ( $exist && $exist->num_rows ) {
+                              $query = "UPDATE mb_cursor SET mbc_value='$rcContinue' "
+                                    . "WHERE mbc_key='rccontinue'";
+                        } else {
+                              $query = "INSERT INTO mb_cursor (mbc_key, mbc_value) "
+                                    . " values ('rccontinue', '$rcContinue')";
+                        }
+                        $success = $db->query( $query );
+                        echo "$query\n";
+                        if ( !$success ) {
+                              die ( "Failed to set cursor!\n" );
+                        } else {
+                              echo "Set cursor successfully!\n";
+                        }
+                  } else {                        
+                        // Note this failure in the failure log file
+                        logFailure ( "Failure inserting data\n" );
+                        logFailure ( $row );
+                        logFailure ( $db->error_list );
+                        die();
+                  }
+                  if ( $options['q'] == 'rcrev' ) {
+                        $optionThisTime = 'rev';
+                  }
                   break;
             case 'rev':
-                  $table = 'mb_rc_queue';
-                  $where = "(mbrcq_rc_type='edit' or mbrcq_rc_type='new') AND mbrcq_text='' AND mbrcq_push_result=''";
-                  $ret = $con->query( "SELECT * FROM mb_rc_queue "
+                  $table = 'mb_queue';
+                  $where = "mbq_status='needsrev'";
+                  $ret = $db->query( "SELECT * FROM mb_queue "
                         ."WHERE $where LIMIT $revLimit" );
-                  // TODO: What about situations in which it's expected that you'll run out of
-                  // items, and need to keep looping anyway?
-                  if ( !$ret ) {
+                  if ( !$ret || !$ret->num_rows ) {
                         echo ( "No $where items\n" );
+                        if ( $options['q'] == 'rcrev' ) {
+                              $optionThisTime = 'rc';
+                        }
                         break;
                   }
                   $value = array();
                   $revIds = array();
                   while ( $value = $ret->fetch_assoc() ) {
-                        $revIds[] = $value[ 'mbrcq_rc_thisoldid' ];
+                        $revIds[] = $value[ 'mbq_rev_id' ];
                   }
                   $firstRevId = true;
                   $queryChunk = '';
@@ -225,204 +281,67 @@ while ( $options['r'] != 'o' || !$passes ) {
                         $firstRevId = false;
                         $queryChunk .= $revId;
                   }
-                  $ret = $wiki->query ("?action=query&prop=revisions&rvprop=content|ids|contentmodel&revids="
-                        . $queryChunk . '&format=php' , true );
+                  $ret = $wiki->query (
+                        "?action=query&prop=revisions&rvprop=user|comment|content|ids|contentmodel&revids="
+                        . $queryChunk . '&format=php', true );
                   if ( !$ret ) {
                         echo "Did not retrieve any revisions from query; skipping back around\n";
                         break;
                   }
                   $events = $ret['query']['pages'];
-                  foreach ( $events as $thisEvent ) { // Get the particular page...
-                        $thisRevId = $thisEvent[ 'revisions' ][0]['revid' ];
-                        $content = "'" . $con->real_escape_string( $thisEvent[ 'revisions' ][0]['*'] ) . "'";
-                        $revid = "'" . $con->real_escape_string( $thisEvent[ 'revisions' ][0]['revid' ] ) . "'";
-                        $contentmodel = "'" . $con->real_escape_string( $thisEvent[ 'revisions' ][0]['contentmodel' ] ) . "'";
+                  foreach ( $events as $event ) { // Get the particular page...
+                        $thisRevId = $event[ 'revisions' ][0]['revid' ];
+                        $content = "'" . $db->real_escape_string(
+                              $event[ 'revisions' ][0]['*'] ) . "'";
+                        $revid = "'" . $db->real_escape_string(
+                              $event[ 'revisions' ][0]['revid' ] ) . "'";
+                        $contentmodel = "'" . $db->real_escape_string(
+                              $event[ 'revisions' ][0]['contentmodel' ] ) . "'";
+                        $contentformat = "'" . $db->real_escape_string(
+                              $event[ 'revisions' ][0]['contentformat' ] ) . "'";
+                        $deleted = 0;
+                        if ( isset( $event[ 'revisions' ][0]['texthidden' ] ) ) {
+                                    $deleted++;
+                        }
+                        if ( isset( $event[ 'revisions' ][0]['commenthidden' ] ) ) {
+                              $deleted += 2;
+                        }
+                        if ( isset( $event[ 'revisions' ][0]['userhidden' ] ) ) {
+                              $deleted += 4;
+                        }
+                        $event['mbqdeleted'] = $deleted;
                         // Insert the content, and get the ID for that row
                         // TODO: Begin transaction and commit transaction
                         $query = 'INSERT INTO mb_text SET '
                               . 'mbt_text=' . $content;
-                        $status = $con->query ( $query );
+                        $status = $db->query ( $query );
                         if ( $status ) {
-                              echo "Success inserting text for $thisRevId\n";
+                              echo "Success inserting text for rev id $thisRevId\n";
                         } else {
-                              echo "Failure inserting text for $thisRevId\n";
                               // Note this failure in the failure log file
-                              fwrite ( $failures, $query . "\n" );
+                              logFailure ( "Failure inserting text for rev id $thisRevId\n" );
+                              logFailure ( $db->error_list );
                         }
-                        $textId = $con->$insert_id();
+                        $textId = $db->insert_id;
                         // Now update the queue
-                        $query = 'UPDATE mb_rc_queue SET '
-                              . 'mbrcq_textid=' . $textId
-                              . ',mbrcq_content_model=' . $contentmodel
-                              . " WHERE mbrcq_rc_thisoldid="
+                        $query = 'UPDATE mb_queue SET '
+                              . 'mbq_text_id=' . $textId
+                              . ',mbq_deleted=' . $deleted
+                              . ',mbq_rev_content_model=' . $contentmodel
+                              . ',mbq_rev_content_format=' . $contentformat
+                              . ",mbq_status='readytopush'"
+                              . " WHERE mbq_rev_id="
                               . $revid;
-                        $status = $con->query ( $query );
+                        $status = $db->query ( $query );
                         if ( $status ) {
-                              echo "Success updating $thisRevId\n";
+                              echo "Success updating $thisRevId with text id $textId\n";
                         } else {
-                              echo "Failure updating $thisRevId\n";
                               // Note this failure in the failure log file
-                              fwrite ( $failures, $query . "\n" );
+                              logFailure( "Failure updating $thisRevId with text id $textId\n" );
+                              logFailure ( $db->error_list );
                         }
                   }
                   break;
-            case 'us': // The usefulness of this entire section of code is questionable.
-                  $table = 'mb_rc_queue';
-                  $where = "mbrcq_rc_log_action='create' AND mbrcq_rc_logtype='newusers'";
-                  $ret = $con->query( "SELECT * FROM mb_rc_queue "
-                        ."WHERE $where LIMIT 500" );
-                  if ( !$ret ) {
-                        die ( "No $where items\n" );
-                  }
-                  $userTitle = array();
-                  while ( $value = $ret->fetch_assoc() ) {
-                        // Strip "User:" off the front
-                        if ( substr( $value['mbrcq_rc_title'], 0, 5 ) == 'User:' ) {
-                              $value['mbrcq_rc_title'] =
-                                    substr( $value['mbrcq_rc_title'], 5,
-                                           strlen( $value['mbrcq_rc_title'] ) - 5 );
-                        }
-                        $userTitle[] = $value[ 'mbrcq_rc_title' ];
-                  }
-                  $firstUserTitle = true;
-                  $queryChunk = '';
-                  foreach ( $userTitle as $thisUserTitle ) {
-                        if ( !$firstUserTitle ) {
-                              $queryChunk .= '|';
-                        }
-                        $firstUserTitle = false;
-                        $queryChunk .= urlencode( $thisUserTitle );
-                  }
-                  // POST, don't use a header, and don't unserialize
-                  $ret = $wiki->query ('?action=query&format=php&list=users&ususers=' . $queryChunk
-                        , true );
-                  if ( !$ret ) {
-                        echo "Error: Did not retrieve any user IDs from query\n";
-                  }
-                  $events = $ret['query']['users'];
-                  foreach ( $events as $thisEvent ) {
-                        $name = "'" . $con->real_escape_string( $thisEvent[ 'name' ] ) . "'";
-                        $pageTitle = "'User:" . $con->real_escape_string( $thisEvent[ 'name' ] ) . "'";
-                        $query = 'UPDATE mb_rc_queue SET '
-                              . 'mbrcq_user=' . $thisEvent[ 'userid']
-                              . ', mbrcq_user_text=' . $name
-                              . " WHERE mbrcq_rc_log_action='create' AND"
-                              . " mbrcq_rc_logtype='newusers' AND mbrcq_rc_title="
-                              . $pageTitle;
-                        echo $query . "\n";
-                        $status = $con->query ( $query );
-                        if ( $status ) {
-                              echo "Success\n";
-                        } else {
-                              echo "Failure\n";
-                        }
-                  }
-                  break;
-      }
-
-      if ( $options[ 'q' ] == 'rc' ) {
-            $dbFields = array_keys ( $fields );
-            $userRow = array_values ( $fields );
-            $undesirables = array ( '-', ':', 'T', 'Z' );
-            $row = 'insert into ' . $table . ' ( ' . implode ( ', ', $dbFields ) . ' ) values ';
-            $isFirstInEvent = true;
-            $events = $ret['query']['recentchanges'];
-            // For each user creation event in that result set
-            if ( $skip ) {
-                  array_shift( $events );
-            }
-            foreach ( $events as $thisLogevent ) {
-                  // Default values for adduserid and adduser
-                  if ( isset ( $thisLogevent[ 'userid' ] ) ) {
-                        $thisLogevent[ 'addeduserid' ] = $thisLogevent[ 'userid' ];
-                  }
-                  if ( isset ( $thisLogevent[ 'user' ] ) ) {
-                        $thisLogevent[ 'addeduser' ] = $thisLogevent[ 'user' ];
-                  }
-                  // Make those different if it's a create2
-                  if ( isset ( $thisLogevent[ 'logaction' ] ) ) {
-                        if ( $thisLogevent[ 'logaction' ] == 'create2' ) {
-                              $thisLogevent [ 'addeduserid' ] = 0;
-                              $title = $thisLogevent[ 'title' ];
-                              $strposTitle = strpos ( $title, ':' );
-                              $thisLogevent [ 'addeduser' ] = substr ( $title, $strposTitle + 1
-                                    , strlen ( $title ) - $strposTitle );
-                        }
-                  }
-                  if ( !$isFirstInEvent ) {
-                        $row .= ', ';
-                  }
-                  $isFirstInEvent = false;
-                  $row .= '( ';
-                  $isFirstInItem = true;
-                  // Get rid of dashes, colons, Ts and Zs in timestamp
-                  $thisLogevent['timestamp'] = str_replace ( $undesirables, '', $thisLogevent['timestamp'] );
-                  // Iterate over those database fields
-                  foreach ( $userRow as $thisRowItem ) {
-                        if ( !$isFirstInItem ) {
-                              $row .= ', ';
-                        }
-                        $isFirstInItem = false;
-                        // If it's a boolean field, 1 if it's there, 0 if not
-                        if ( in_array( $thisRowItem, $booleanFields ) ) {
-                              if ( isset ( $thisLogevent[ $thisRowItem ] ) ) {
-                                    $row .= '1';
-                              } else {
-                                    $row .= '0';
-                              }
-                        } else {
-                              if ( isset ( $thisLogevent[$thisRowItem] ) ) {
-                                    // If it's an array (e.g. tag array), implode it
-                                    if ( is_array ( $thisLogevent[$thisRowItem] ) ) {
-                                          $thisLogevent[$thisRowItem] = implode ( $thisLogevent[$thisRowItem] );
-                                    }
-                                    // If it's a string field, escape it
-                                    if ( in_array ( $thisRowItem, $stringFields ) ) {
-                                          $thisLogevent[$thisRowItem] = "'" . $con->real_escape_string
-                                                ( $thisLogevent[$thisRowItem] ) . "'";
-                                    }
-                                    $row .= $thisLogevent[$thisRowItem];
-                              } else {
-                                    $row .= $defaultFields[$thisRowItem];
-                              }
-                        }
-                  }
-                  $provisionalRccontinue = 'Y' . $thisLogevent['timestamp'] . $thisLogevent['rcid'];
-                  $row .= ')';
-            }
-            $row .= ';';
-            echo $row . "\n";
-            $queryResult = $con->query ( $row );
-            if ( $queryResult ) {
-                  echo "Inserted data successfully!\n";
-                  if ( !$rcContinue ) {
-                        $rcContinue = $provisionalRccontinue;
-                        $skip = true;
-                  } else {
-                        $skip = false;
-                  }
-                  // Check cursor existence; if it doesn't, then create one
-                  $exist = $con->query( 'SELECT * FROM mb_cursor WHERE'
-                        . " mbc_key='rccontinue'");
-                  if ( $exist && $exist->num_rows ) {
-                        $query = "UPDATE mb_cursor SET mbc_value='$rcContinue' "
-                              . "WHERE mbc_key='rccontinue'";
-                  } else {
-                        $query = "INSERT INTO mb_cursor (mbc_key, mbc_value) "
-                              . " values ('rccontinue', '$rcContinue')";
-                  }
-                  $success = $con->query( $query );
-                  echo "$query\n";
-                  if ( !$success ) {
-                        die ( "Failed to set cursor!\n" );
-                  } else {
-                        echo "Set cursor successfully!\n";
-                  }
-            } else {
-                  echo "Failure inserting data\n";
-                  // Note this failure in the failure log file
-                  fwrite ( $failures, $row . "\n" );
-            }
       }
       if ( $options['r'] != 'o' ) {
             echo "Sleeping $sleepMicroseconds microseconds...";
