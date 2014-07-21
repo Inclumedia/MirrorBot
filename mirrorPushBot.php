@@ -125,15 +125,16 @@ while ( $keepGoing ) {
             $pushTimestamp = $localRet['mirrorlogentry']['timestamp'];
       }
       if ( isset( $localRet['mirroredit']['timestamp'] ) ) {
-            $pushTimestamp = $localRet['mirroreditpage']['timestamp'];
+            $pushTimestamp = $localRet['mirroredit']['timestamp'];
       }
       $pushStatusQuery = "UPDATE mb_queue SET mbq_status='pushed', mbq_push_timestamp='"
             . $pushTimestamp
             . "' WHERE mbq_id=" . $row['mbq_id'];
-      echo $pushStatusQuery . "\n";
+      #echo $pushStatusQuery . "\n";
       $pushResult = $db->query ( $pushStatusQuery );
       if ( !$pushResult ) {
-            var_dump( $db->error_list );
+            logFailure( "Failure updating mb_queue with push timestamp $pushTimestamp\n" );
+            logFailure ( $db->error_list );
             echo "\n";
       }
 }

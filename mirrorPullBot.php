@@ -152,6 +152,15 @@ while ( $options['r'] != 'o' || !$passes ) {
                         // Get rid of dashes, colons, Ts and Zs in timestamp
                         $thisLogevent['timestamp'] = str_replace ( $undesirables, '',
                               $thisLogevent['timestamp'] );
+                        foreach( $namespacesToTruncate as $namespaceToTruncate ) {
+                              if ( substr( $thisLogevent['title'], 0,
+                                    strlen( $namespaceToTruncate ) ) == $namespaceToTruncate ) {
+                                    $thisLogevent['title'] = substr( $thisLogevent['title'],
+                                          strlen( $namespaceToTruncate ),
+                                          strlen( $thisLogevent['title'] )
+                                          - strlen( $namespaceToTruncate ) );
+                              }
+                        }
                         if ( isset( $thisLogevent['type'] ) ) {
                               if ( $thisLogevent['type'] == 'edit'
                                     || $thisLogevent['type'] == 'new' ) {
@@ -238,7 +247,7 @@ while ( $options['r'] != 'o' || !$passes ) {
                                     . " values ('rccontinue', '$rcContinue')";
                         }
                         $success = $db->query( $query );
-                        echo "$query\n";
+                        #echo "$query\n";
                         if ( !$success ) {
                               die ( "Failed to set cursor!\n" );
                         } else {
@@ -334,10 +343,10 @@ while ( $options['r'] != 'o' || !$passes ) {
                               . $revid;
                         $status = $db->query ( $query );
                         if ( $status ) {
-                              echo "Success updating $thisRevId with text id $textId\n";
+                              echo "Success updating rev $thisRevId with text id $textId\n";
                         } else {
                               // Note this failure in the failure log file
-                              logFailure( "Failure updating $thisRevId with text id $textId\n" );
+                              logFailure( "Failure updating rev $thisRevId with text id $textId\n" );
                               logFailure ( $db->error_list );
                         }
                   }
