@@ -101,7 +101,7 @@ while ( $keepGoing ) {
                   $continueThis = true;
       }
       if ( $continueThis ) {
-            $continue;
+            continue;
       }
       $query = "?action=$action&format=php&token=$token";
       foreach( $pushMapping as $pushMappingKey => $pushMappingValue ) {

@@ -1,5 +1,12 @@
 <?php
 $localWikiName = 'test102';
+$remoteWikiName = 'test103';
+// MirrorBot API url
+$localWikiUrl = "http://localhost/test102/w/api.php";
+$remoteWikiUrl = array(
+    'test103' => "http://localhost/test103/w/api.php",
+    'enwiki' => "http://en.wikipedia.org/w/api.php"
+);
 $defaultMicroseconds = array(
     'pull' => array (
         'rc' => 2000,
@@ -83,6 +90,7 @@ $fields = array (
         'mbq_rc_new' => 'new',
         'mbq_len' => 'newlen',
         'mbq_namespace' => 'ns',
+        'mbq_params' => 'params',
         'mbq_rc_old_len' => 'oldlen',
         'mbq_page_id' => 'pageid',
         'mbq_rc_patrolled' => 'patrolled',
@@ -112,6 +120,7 @@ $stringFields = array (
         'tags',
         'logaction',
         'logtype',
+        'params',
         'contentmodel',
         'contentformat',
         'sha1'
@@ -146,6 +155,7 @@ $defaultFields = array (
         'ns' => 0,
         'oldlen' => 0,
         'pageid' => 0,
+        'params' => 0,
         'patrolled' => 0,
         'revid' => 0,
         'revoldid' => 0,
@@ -167,31 +177,31 @@ $mirrorActions = array(
 );
 // Namespaces to truncate
 $namespacesToTruncate = array(
-    'Talk:',
-    'User:',
-    'User talk:',
-    'Wikipedia:',
-    'Wikipedia talk:',
-    'File:',
-    'File talk:',
-    'MediaWiki:',
-    'MediaWiki talk:',
-    'Template:',
-    'Template talk:',
-    'Help:',
-    'Help talk:',
-    'Category:',
-    'Category talk:',
-    'Portal:',
-    'Portal talk:',
-    'Book:',
-    'Book talk:',
-    'Draft:',
-    'Draft talk:',
-    'EducationProgram:',
-    'EducationProgram talk:',
-    'TimedText:',
-    'TimedText talk:',
-    'Module:',
-    'Module talk:'
+    1 => 'Talk:',
+    2 => 'User:',
+    3 => 'User talk:',
+    4 => 'Wikipedia:',
+    5 => 'Wikipedia talk:',
+    6 => 'File:',
+    7 => 'File talk:',
+    8 => 'MediaWiki:',
+    9 => 'MediaWiki talk:',
+    10 => 'Template:',
+    11 => 'Template talk:',
+    12 => 'Help:',
+    13 => 'Help talk:',
+    14 => 'Category:',
+    15 => 'Category talk:',
+    100 => 'Portal:',
+    101 => 'Portal talk:',
+    108 => 'Book:',
+    109 => 'Book talk:',
+    118 => 'Draft:',
+    119 => 'Draft talk:',
+    446 => 'EducationProgram:',
+    447 => 'EducationProgram talk:',
+    710 => 'TimedText:',
+    711 => 'TimedText talk:',
+    828 => 'Module:',
+    829 => 'Module talk:'
 );

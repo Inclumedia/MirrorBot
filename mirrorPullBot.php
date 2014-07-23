@@ -77,10 +77,10 @@ if ( $options['r'] == 'd' ) {
 /* Setup my classes. */
 require_once("$botClassesPath/botclasses.php");
 $wiki      = new wikipedia;
-$wiki->url = $remoteWikiUrl;
+$wiki->url = $remoteWikiUrl[$remoteWikiName];
 
 // Login
-$wiki->login( $pullUser, $pullPass );
+$wiki->login( $pullUser[$remoteWikiName], $pullPass[$remoteWikiName] );
 
 $passes = 0; // Which part of the loop are we on?
 $rcContinue = '';
@@ -120,13 +120,14 @@ while ( $options['r'] != 'o' || !$passes ) {
                   }
                   $ret = $wiki->query ( "?action=query&list=recentchanges"
                         . "$rcStart&rcdir=newer&rcprop=user|userid|comment|timestamp|"
-                        . "patrolled|title|ids|sizes|redirect|loginfo|flags|loginfo|sha1|tags&rclimit=$rcLimit"
+                        . "patrolled|title|ids|sizes|redirect|loginfo|flags|sha1|tags&rclimit=$rcLimit"
                         . "$rcContinue&format=php", true);
                   if ( isset( $ret['query-continue']['recentchanges']['rccontinue'] ) ) {
                         $rcContinue = 'N' . $ret['query-continue']['recentchanges']['rccontinue'];
                   }
                   if ( !isset( $ret['query'] ) ) {
-                        echo( 'API did not give the required query' );
+                        echo( "API did not give the required query\n" );
+                        var_dump( $ret );
                         break;
                   }
                   $events = $ret['query']['recentchanges'];
@@ -159,6 +160,7 @@ while ( $options['r'] != 'o' || !$passes ) {
                                           strlen( $namespaceToTruncate ),
                                           strlen( $thisLogevent['title'] )
                                           - strlen( $namespaceToTruncate ) );
+                                    break;
                               }
                         }
                         if ( isset( $thisLogevent['type'] ) ) {
@@ -188,6 +190,17 @@ while ( $options['r'] != 'o' || !$passes ) {
                                     $deleted += 4;
                               }
                               $thisLogevent['mbqdeleted'] = $deleted;
+                        }
+                        if ( isset( $thisLogevent['move'] ) ) {
+                              if ( isset( $thisLogevent['redirect'] ) ) {
+                                    $noredirect = '1';
+                              } else {
+                                    $noredirect = '0';
+                              }
+                              $thisLogevent['params'] = serialize( array(
+                                    '4::target' => $thisLogevent['move']['new_title'],
+                                    '5::noredir' => $noredirect
+                              ) );
                         }
                         if ( isset( $thisLogevent['ip'] ) ) {
                               $thisLogevent['mbqrcip'] = $thisLogevent['usertext'];
@@ -290,64 +303,72 @@ while ( $options['r'] != 'o' || !$passes ) {
                         $firstRevId = false;
                         $queryChunk .= $revId;
                   }
-                  $ret = $wiki->query (
-                        "?action=query&prop=revisions&rvprop=user|comment|content|ids|contentmodel&revids="
-                        . $queryChunk . '&format=php', true );
+                  $query = "?action=query&prop=revisions&rvprop=user|comment|content|ids|contentmodel&revids="
+                        . $queryChunk . '&format=php';
+                  $ret = $wiki->query( $query, true );
                   if ( !$ret ) {
                         echo "Did not retrieve any revisions from query; skipping back around\n";
                         break;
                   }
-                  $events = $ret['query']['pages'];
-                  foreach ( $events as $event ) { // Get the particular page...
-                        $thisRevId = $event[ 'revisions' ][0]['revid' ];
-                        $content = "'" . $db->real_escape_string(
-                              $event[ 'revisions' ][0]['*'] ) . "'";
-                        $revid = "'" . $db->real_escape_string(
-                              $event[ 'revisions' ][0]['revid' ] ) . "'";
-                        $contentmodel = "'" . $db->real_escape_string(
-                              $event[ 'revisions' ][0]['contentmodel' ] ) . "'";
-                        $contentformat = "'" . $db->real_escape_string(
-                              $event[ 'revisions' ][0]['contentformat' ] ) . "'";
-                        $deleted = 0;
-                        if ( isset( $event[ 'revisions' ][0]['texthidden' ] ) ) {
-                                    $deleted++;
-                        }
-                        if ( isset( $event[ 'revisions' ][0]['commenthidden' ] ) ) {
-                              $deleted += 2;
-                        }
-                        if ( isset( $event[ 'revisions' ][0]['userhidden' ] ) ) {
-                              $deleted += 4;
-                        }
-                        $event['mbqdeleted'] = $deleted;
-                        // Insert the content, and get the ID for that row
-                        // TODO: Begin transaction and commit transaction
-                        $query = 'INSERT INTO mb_text SET '
-                              . 'mbt_text=' . $content;
-                        $status = $db->query ( $query );
-                        if ( $status ) {
-                              echo "Success inserting text for rev id $thisRevId\n";
-                        } else {
-                              // Note this failure in the failure log file
-                              logFailure ( "Failure inserting text for rev id $thisRevId\n" );
-                              logFailure ( $db->error_list );
-                        }
-                        $textId = $db->insert_id;
-                        // Now update the queue
-                        $query = 'UPDATE mb_queue SET '
-                              . 'mbq_text_id=' . $textId
-                              . ',mbq_deleted=' . $deleted
-                              . ',mbq_rev_content_model=' . $contentmodel
-                              . ',mbq_rev_content_format=' . $contentformat
-                              . ",mbq_status='readytopush'"
-                              . " WHERE mbq_rev_id="
-                              . $revid;
-                        $status = $db->query ( $query );
-                        if ( $status ) {
-                              echo "Success updating rev $thisRevId with text id $textId\n";
-                        } else {
-                              // Note this failure in the failure log file
-                              logFailure( "Failure updating rev $thisRevId with text id $textId\n" );
-                              logFailure ( $db->error_list );
+                  $pages = $ret['query']['pages'];
+                  foreach ( $pages as $page ) { // Get the particular page...
+                        $revisions = $page['revisions'];
+                        foreach( $revisions as $revision ) { // Get the particular revision...
+                              $thisRevId = $revision['revid'];
+                              $content = "''";
+                              if ( isset( $revision['*'] ) ) {
+                                    $content = "'" . $db->real_escape_string(
+                                          $revision['*'] ) . "'";
+                              }
+                              $revid = "'" . $db->real_escape_string(
+                                    $revision['revid'] ) . "'";
+                              $contentmodel = "'" . $db->real_escape_string(
+                                    $revision['contentmodel'] ) . "'";
+                              $contentformat = "''";
+                              if ( isset( $revision['contentformat'] ) ) {
+                                    $contentformat = "'" . $db->real_escape_string(
+                                          $revision['contentformat'] ) . "'";
+                              }
+                              $deleted = 0;
+                              if ( isset( $revision['texthidden'] ) ) {
+                                          $deleted++;
+                              }
+                              if ( isset( $revision['commenthidden'] ) ) {
+                                    $deleted += 2;
+                              }
+                              if ( isset( $revision['userhidden' ] ) ) {
+                                    $deleted += 4;
+                              }
+                              // Insert the content, and get the ID for that row
+                              // TODO: Begin transaction and commit transaction
+                              $query = "INSERT INTO mb_text (mbt_text) VALUES ("
+                                    . $content . ")";
+                              $status = $db->query ( $query );
+                              if ( $status ) {
+                                    echo "Success inserting text for rev id $thisRevId\n";
+                              } else {
+                                    // Note this failure in the failure log file
+                                    logFailure ( "Failure inserting text for rev id $thisRevId\n" );
+                                    logFailure ( $db->error_list );
+                              }
+                              $textId = $db->insert_id;
+                              // Now update the queue
+                              $query = 'UPDATE mb_queue SET '
+                                    . 'mbq_text_id=' . $textId
+                                    . ',mbq_deleted=' . $deleted
+                                    . ',mbq_rev_content_model=' . $contentmodel
+                                    . ',mbq_rev_content_format=' . $contentformat
+                                    . ",mbq_status='readytopush'"
+                                    . " WHERE mbq_rev_id="
+                                    . $revid;
+                              $status = $db->query ( $query );
+                              if ( $status ) {
+                                    echo "Success updating rev $thisRevId with text id $textId\n";
+                              } else {
+                                    // Note this failure in the failure log file
+                                    logFailure( "Failure updating rev $thisRevId\n" );
+                                    logFailure ( $db->error_list );
+                              }
                         }
                   }
                   break;
