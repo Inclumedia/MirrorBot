@@ -9,16 +9,16 @@ $remoteWikiUrl = array(
 );
 $defaultMicroseconds = array(
     'pull' => array (
-        'rc' => 2000,
-        'rev' => 2000,
-        'us' => 2000,
+        'rc' => 2000 * 1000,
+        'rev' => 2000 * 1000,
     ),
-    'push' => array (
-        'us' => 2000,
-    )
+    'push' => 1000 * 1000
 );
 $botClassesPath = "/home/nathan/Chris-G-botclasses";
-$passwordPath = "/home/nathan/MirrorBot/passwords/";
+$mirrorBotPath = "/home/nathan/MirrorBot/";
+$passwordPath = $mirrorBotPath . "passwords/";
+$databasesPath = $mirrorBotPath . "databases/";
+$scenariosPath = $mirrorBotPath . "scenarios/";
 $tables = array(
     'mb_queue' => 'mb-queue.sql',
     'mb_text' => 'mb-text.sql',
@@ -78,6 +78,7 @@ $fields = array (
         'mbq_action' => 'mbqaction',
         'mbq_status' => 'mbqstatus',
         'mbq_deleted' => 'mbqdeleted',
+        'mbq_rc_source' => 'mbqrcsource',
         'mbq_rc_ip' => 'mbqrcip',
         'mbq_rc_id' => 'rcid',
         'mbq_rc_anon' => 'anon',
@@ -85,12 +86,12 @@ $fields = array (
         'mbq_comment' => 'comment',
         'mbq_log_action' => 'logaction',
         'mbq_log_id' => 'logid',
+        'mbq_log_params' => 'params',
         'mbq_log_type' => 'logtype',
         'mbq_minor' => 'minor',
         'mbq_rc_new' => 'new',
         'mbq_len' => 'newlen',
         'mbq_namespace' => 'ns',
-        'mbq_params' => 'params',
         'mbq_rc_old_len' => 'oldlen',
         'mbq_page_id' => 'pageid',
         'mbq_rc_patrolled' => 'patrolled',
@@ -112,6 +113,7 @@ $stringFields = array (
         'mbqaction',
         'mbqstatus',
         'mbqrcip',
+        'mbqrcsource',
         'title',
         'type',
         'action',
@@ -204,4 +206,9 @@ $namespacesToTruncate = array(
     711 => 'TimedText talk:',
     828 => 'Module:',
     829 => 'Module talk:'
+);
+$sources = array(
+    'new' => 'mw.new',
+    'edit' => 'mw.edit',
+    'log' => 'mw.log'
 );

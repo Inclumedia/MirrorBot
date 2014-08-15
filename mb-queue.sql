@@ -14,6 +14,8 @@ mbq_status VARCHAR(255) BINARY NOT NULL DEFAULT '',
 
 -- log_comment, rc_comment, rev_comment; comment (from api rc)
 mbq_comment VARCHAR(255) BINARY NOT NULL DEFAULT '',
+-- rev_comment of null and redirect revisions; applicable to page moves
+mbq_comment2 VARCHAR(255) BINARY NOT NULL DEFAULT '',
 -- log_deleted, rc_deleted, rev_deleted
 mbq_deleted tinyint unsigned NOT NULL default 0,
 -- rev_len, rc_new_len; newlen (from api rc)
@@ -34,6 +36,8 @@ mbq_namespace INT NOT NULL DEFAULT 0,
 mbq_page_id int unsigned NOT NULL,
 -- rc_this_oldid, rev_id; revid (from api rc)
 mbq_rev_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- redirect rev id (from api rev)
+mbq_rev_id2 INT UNSIGNED NOT NULL DEFAULT 0,
 -- log_timestamp, rc_timestamp, rev_timestamp; timestamp
 mbq_timestamp varbinary(14) NOT NULL DEFAULT '',
 -- log_title, page_title, rc_title, title (512, because it is prefixed by the namespace)

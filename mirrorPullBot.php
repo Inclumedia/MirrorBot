@@ -28,13 +28,14 @@ include( 'mirrorInitializeDb.php' );
 // "r" (repeat) Three options: -ro (onetime), -rd (continuous, using defaults),
 // r<number of microsecs to sleep>
 // "s" starting timestamp
-$usage = 'Usage: php mirrorpullbot.php -q<option (e.g. rc, rev, us, sw)> '
+$usage = 'Usage: php mirrorpullbot.php -q<option (e.g. rc, rev, nullrev, movenullrev, rcrev)> '
       . '[-r<option (e.g. ro, rd, r<microseconds>>] [-s<starting (e.g. 20120101000000)>])' . "\n";
 $options = getopt( 'q:r:s:');
 $allowableOptions['q'] = array(
       'rc',
       'rev',
-      'us',
+      'nullrev',
+      'movenullrev',
       'rcrev'
 );
 $allowableOptions['r'] = array(
@@ -90,8 +91,18 @@ $skip = false;
 $optionThisTime = $options['q'];
 while ( $options['r'] != 'o' || !$passes ) {
       $passes++;
-      if ( $optionThisTime == 'rcrev' ) {
-            $optionThisTime = 'rev';
+      if ( $options['q'] == 'rcrev' ) {
+            switch ( $optionThisTime ) {
+                  case 'rc':
+                       $optionThisTime = 'rev';
+                       break;
+                  case 'rev':
+                       $optionThisTime = 'movenullrev';
+                       break;
+                  case 'movenullrev':
+                       $optionThisTime = 'rc';
+                       break;
+            }
       }
       switch ( $optionThisTime ) {
             case 'rc':
@@ -121,13 +132,17 @@ while ( $options['r'] != 'o' || !$passes ) {
                   $ret = $wiki->query ( "?action=query&list=recentchanges"
                         . "$rcStart&rcdir=newer&rcprop=user|userid|comment|timestamp|"
                         . "patrolled|title|ids|sizes|redirect|loginfo|flags|sha1|tags&rclimit=$rcLimit"
-                        . "$rcContinue&format=php", true);
+                        . "$rcContinue&format=php", true );
                   if ( isset( $ret['query-continue']['recentchanges']['rccontinue'] ) ) {
                         $rcContinue = 'N' . $ret['query-continue']['recentchanges']['rccontinue'];
                   }
-                  if ( !isset( $ret['query'] ) ) {
+                  if ( !isset( $ret['query']['recentchanges'] ) ) {
                         echo( "API did not give the required query\n" );
                         var_dump( $ret );
+                        break;
+                  }
+                  if ( !$ret['query']['recentchanges'] ) {
+                        echo( "There were no recent changes results\n" );
                         break;
                   }
                   $events = $ret['query']['recentchanges'];
@@ -141,6 +156,10 @@ while ( $options['r'] != 'o' || !$passes ) {
                   // For each user creation event in that result set
                   if ( $skip ) {
                         array_shift( $events );
+                  }
+                  if ( !$events ) {
+                        echo "No events\n";
+                        break;
                   }
                   foreach ( $events as $thisLogevent ) {
                         $deleted = 0;
@@ -178,7 +197,11 @@ while ( $options['r'] != 'o' || !$passes ) {
                                     } else {
                                           $thisLogevent['mbqaction'] = 'mirrorlogentry';
                                     }
-                                    $thisLogevent['mbqstatus'] = 'readytopush';
+                                    if ( $thisLogevent['logtype'] == 'move' ) {
+                                          $thisLogevent['mbqstatus'] = 'needsmovenullrev';
+                                    } else {
+                                          $thisLogevent['mbqstatus'] = 'readytopush';
+                                    }
                               }
                               if ( isset( $thisLogevent['actionhidden'] ) ) {
                                     $deleted++;
@@ -193,9 +216,9 @@ while ( $options['r'] != 'o' || !$passes ) {
                         }
                         if ( isset( $thisLogevent['move'] ) ) {
                               if ( isset( $thisLogevent['redirect'] ) ) {
-                                    $noredirect = '1';
-                              } else {
                                     $noredirect = '0';
+                              } else {
+                                    $noredirect = '1';
                               }
                               $thisLogevent['params'] = serialize( array(
                                     '4::target' => $thisLogevent['move']['new_title'],
@@ -204,6 +227,9 @@ while ( $options['r'] != 'o' || !$passes ) {
                         }
                         if ( isset( $thisLogevent['ip'] ) ) {
                               $thisLogevent['mbqrcip'] = $thisLogevent['usertext'];
+                        }
+                        if ( isset( $thisLogevent['type'] ) ) {
+                              $thisLogevent['mbqrcsource'] = $sources[$thisLogevent['type']];
                         }
                         // Iterate over those database fields
                         foreach ( $userRow as $thisRowItem ) {
@@ -235,14 +261,13 @@ while ( $options['r'] != 'o' || !$passes ) {
                                     }
                               }
                         }
-                        $provisionalRccontinue = 'Y' . $thisLogevent['timestamp'] . $thisLogevent['rcid'];
+                        $provisionalRccontinue = 'Y' . $thisLogevent['timestamp'] . '|' . $thisLogevent['rcid'];
                         $row .= ')';
                   }
                   $row .= ';';
-                  #echo $row . "\n";
                   $queryResult = $db->query ( $row );
                   if ( $queryResult ) {
-                        echo "Inserted data successfully!\n";
+                        echo "Inserted " . count( $events ) . " changes successfully!\n";
                         if ( !$rcContinue ) {
                               $rcContinue = $provisionalRccontinue;
                               $skip = true;
@@ -260,7 +285,6 @@ while ( $options['r'] != 'o' || !$passes ) {
                                     . " values ('rccontinue', '$rcContinue')";
                         }
                         $success = $db->query( $query );
-                        #echo "$query\n";
                         if ( !$success ) {
                               die ( "Failed to set cursor!\n" );
                         } else {
@@ -284,9 +308,6 @@ while ( $options['r'] != 'o' || !$passes ) {
                         ."WHERE $where LIMIT $revLimit" );
                   if ( !$ret || !$ret->num_rows ) {
                         echo ( "No $where items\n" );
-                        if ( $options['q'] == 'rcrev' ) {
-                              $optionThisTime = 'rc';
-                        }
                         break;
                   }
                   $value = array();
@@ -303,11 +324,35 @@ while ( $options['r'] != 'o' || !$passes ) {
                         $firstRevId = false;
                         $queryChunk .= $revId;
                   }
-                  $query = "?action=query&prop=revisions&rvprop=user|comment|content|ids|contentmodel&revids="
-                        . $queryChunk . '&format=php';
+                  $query = "?action=query&prop=revisions&rvprop=user|comment|content|ids"
+                        . "|contentmodel&revids=" . $queryChunk . '&format=php';
                   $ret = $wiki->query( $query, true );
                   if ( !$ret ) {
                         echo "Did not retrieve any revisions from query; skipping back around\n";
+                        break;
+                  }
+                  // Handle revisions of deleted pages. Mark these as rows to ignore unless/until
+                  // the pages are undeleted on the remote wiki.
+                  if ( isset( $ret['query']['badrevids'] ) ) {
+                        $badRevs = $ret['query']['badrevids'];
+                        foreach ( $badRevs as $badRev ) {
+                              $badRevId = $badRev['revid'];
+                              $query = 'UPDATE mb_queue SET '
+                                    . "mbq_status='needsundeletion'"
+                                    . " WHERE mbq_rev_id="
+                                    . $badRevId;
+                              $status = $db->query ( $query );
+                              if ( $status ) {
+                                    echo "Bad revision ID $badRevId marked as needsundeletion\n";
+                              } else {
+                                    // Note this failure in the failure log file
+                                    logFailure( "Failure updating rev $badRevId\n" );
+                                    logFailure ( $db->error_list );
+                              }
+                        }
+                  }
+                  if ( !isset( $ret['query']['pages'] ) ) {
+                        echo "There was nothing to put in the queue table.\n";
                         break;
                   }
                   $pages = $ret['query']['pages'];
@@ -372,6 +417,138 @@ while ( $options['r'] != 'o' || !$passes ) {
                         }
                   }
                   break;
+            case 'movenullrev':
+                  $table = 'mb_queue';
+                  $where = "mbq_status='needsmovenullrev'";
+                  $keepLooping = true;
+                  while ( $keepLooping ) {
+                        $ret = $db->query( "SELECT * FROM mb_queue "
+                              ."WHERE $where LIMIT 1" );
+                        if ( !$ret || !$ret->num_rows ) {
+                              echo ( "No $where items for nullrev\n" );
+                              $keepLooping = false;
+                              continue;
+                        }
+                        $value = $ret->fetch_assoc();
+                        $params = $value['mbq_log_params'];
+                        $unserialized = unserialize( $params );
+                        $prefixedMoveTo = $unserialized['4::target'];
+                        $timestamp = $value['mbq_timestamp'];
+                        $timestamp = substr( $timestamp, 0, 4 ) . '-'
+                              . substr( $timestamp, 4, 2 ) . '-'
+                              . substr( $timestamp, 6, 2 ) . 'T'
+                              . substr( $timestamp, 8, 2 ) . ':'
+                              . substr( $timestamp, 10, 2 ) . ':'
+                              . substr( $timestamp, 12, 2 ) . 'Z';
+                        $query = "?action=query&prop=revisions&rvprop=comment|ids"
+                              . "&titles=$prefixedMoveTo&rvstart=$timestamp&rvlimit=1&format=php";
+                        $ret = $wiki->query( $query, true );
+                        if ( !$ret ) {
+                              echo "Did not retrieve any revisions from nullrev query; "
+                                    . "skipping back around\n";
+                              break;
+                        }
+                        if ( !$value['mbq_comment2'] ) {
+                              if ( !isset( $ret['query']['badrevids'] ) ) {
+                                    if ( isset( $ret['query']['pages'] ) ) {
+                                          $pages = $ret['query']['pages'];
+                                          foreach ( $pages as $page ) { // Get the particular page...
+                                                $revisions = $page['revisions'];
+                                                // Get the particular revision...
+                                                foreach( $revisions as $revision ) {
+                                                      $thisRevId = $revision['revid'];
+                                                      $comment = $revision['comment'];
+                                                      // Now update the queue
+                                                      $query = 'UPDATE mb_queue SET '
+                                                            . 'mbq_rev_id=' . $thisRevId
+                                                            . ",mbq_comment2='" . $db->real_escape_string( $comment )
+                                                            . "' WHERE mbq_id=" . $value['mbq_id'];
+                                                      $status = $db->query ( $query );
+                                                      if ( $status ) {
+                                                            echo "Success updating rev id $thisRevId "
+                                                                  ."with comment\n";
+                                                      } else {
+                                                            // Note this failure in the failure log file
+                                                            logFailure( "Failure updating rev $thisRevId "
+                                                                  . "with comment\n" );
+                                                            logFailure ( $db->error_list );
+                                                      }
+                                                }
+                                          }
+                                    } else {
+                                          echo "No query for comment!\n";
+                                    }
+                              } else {
+                                    // These bad revision IDs for null revision IDs can't be allowed to
+                                    // hold up the works.
+                                    echo "Bad revision for comment!\n";
+                              }
+                        }
+                        if ( !$value['mbq_rev_id2'] ) {
+                              // Is there a redirect? If not, break
+                              if ( $unserialized['5::noredir'] == '1' ) {
+                                    $query = 'UPDATE mb_queue SET '
+                                          . "mbq_status='readytopush' "
+                                          . "WHERE mbq_id=" . $value['mbq_id'];
+                                    $status = $db->query ( $query );
+                                    break;
+                              }
+                              // Get the redirect rev ID
+                              $pageId = $value['mbq_page_id'];
+                              $query = "?action=query&prop=revisions&rvprop=comment|ids"
+                                    . "&pageids=$pageId&rvstart=$timestamp&rvlimit=1&format=php";
+                              $ret = $wiki->query( $query, true );
+                              if ( !$ret ) {
+                                    echo "Did not retrieve any revisions from redirect query; "
+                                          . "skipping back around\n";
+                                    break;
+                              }
+                              // Handle revisions whose pages on the remote wiki were deleted. These bad
+                              // revision IDs for redirect revisions can't be allowed to hold up the
+                              // works; the pages must move!
+                              if ( isset( $ret['query']['badrevids'] ) ) {
+                                    $query = 'UPDATE mb_queue SET '
+                                          . "mbq_status='readytopush' "
+                                          . "WHERE mbq_id=" . $value['mbq_id'];
+                                    $status = $db->query ( $query );
+                                    if ( $status ) {
+                                          echo "Bad revision ID for page ID $pageId; "
+                                                . "ready to push anyway\n";
+                                    } else {
+                                          // Note this failure in the failure log file
+                                          logFailure( "Failure updating\n" );
+                                          logFailure ( $db->error_list );
+                                    }
+                              } elseif ( isset( $ret['query']['pages'] ) ) {
+                                    $pages = $ret['query']['pages'];
+                                    foreach ( $pages as $page ) { // Get the particular page...
+                                          $revisions = $page['revisions'];
+                                          // Get the particular revision...
+                                          foreach( $revisions as $revision ) {
+                                                $thisRedirectRevId = $revision['revid'];
+                                                // Now update the queue
+                                                $query = 'UPDATE mb_queue SET '
+                                                      . 'mbq_rev_id2=' . $thisRedirectRevId
+                                                      . ",mbq_status='readytopush'"
+                                                      . " WHERE mbq_id=" . $value['mbq_id'];
+                                                $status = $db->query ( $query );
+                                                if ( $status ) {
+                                                      echo "Success updating rev id $thisRevId "
+                                                            . "with redirect rev id $thisRedirectRevId\n";
+                                                } else {
+                                                      // Note this failure in the failure log file
+                                                      logFailure( "Failure updating rev " . $value['mbq_rev_id']
+                                                            . " with redirect rev id $thisRedirectRevId\n" );
+                                                      logFailure ( $db->error_list );
+                                                }
+                                          }
+                                    }
+                                    break;
+                              } else {
+                                    echo "No query for redirect revision!\n";
+                              }
+                        }
+                  }
       }
       if ( $options['r'] != 'o' ) {
             echo "Sleeping $sleepMicroseconds microseconds...";

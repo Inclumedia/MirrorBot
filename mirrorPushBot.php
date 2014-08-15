@@ -66,15 +66,21 @@ $wiki->__set('quiet','soft'); // Some long URLs will cause problems
 $keepGoing = true;
 $offset = 0;
 while ( $keepGoing ) {
-      $query = "SELECT * FROM mb_queue WHERE mbq_status='readytopush' LIMIT 1";
+      $query = "SELECT * FROM mb_queue WHERE mbq_status<>'pushed' LIMIT 1";
       if ( $offset > 0 ) {
             $query .= " OFFSET $offset";
       }
       $mbRet = $db->query( $query );
       if ( !$mbRet || !$mbRet->num_rows ) {
-            die( "No more rows to push!\n");
+            echo( "No more rows to push!\n");
+            usleep( $defaultMicroseconds['push'] );
       }
       $row = $mbRet->fetch_assoc();
+      if ( $row['mbq_status'] == 'needsrev' ) {
+            echo "Reached a needsrev row!\n";
+            usleep( $defaultMicroseconds['push'] );
+            continue;
+      }
       $action = $row['mbq_action'];
       $pushMapping = null;
       $continueThis = false;
@@ -83,6 +89,9 @@ while ( $keepGoing ) {
             case 'mirrorlogentry':
                   $pushMapping = getMirrorLogEntryPushMapping( $row );
                   $row['mbq_user'] = '0';
+                  break;
+            case 'mirrormove':
+                  $pushMapping = getMirrorMovePushMapping( $row );
                   break;
             case 'mirroredit':
                   $pushMapping = getMirrorEditPushMapping( $row );
@@ -96,8 +105,6 @@ while ( $keepGoing ) {
                   break;
             default:
                   $offset = $row['mbq_id'];
-                  #$offset++;
-                  #echo $offset;
                   $continueThis = true;
       }
       if ( $continueThis ) {
@@ -110,7 +117,6 @@ while ( $keepGoing ) {
                   $data[$pushMappingKey] = $row[$pushMappingValue];
             #}
       }
-      
       $localRet = $wiki->query ( $query, $data
             #,'Content-Type: application/x-www-form-urlencoded'
             ); // POST
@@ -126,6 +132,9 @@ while ( $keepGoing ) {
       }
       if ( isset( $localRet['mirroredit']['timestamp'] ) ) {
             $pushTimestamp = $localRet['mirroredit']['timestamp'];
+      }
+      if ( isset( $localRet['mirrormove']['timestamp'] ) ) {
+            $pushTimestamp = $localRet['mirrormove']['timestamp'];
       }
       $pushStatusQuery = "UPDATE mb_queue SET mbq_status='pushed', mbq_push_timestamp='"
             . $pushTimestamp
@@ -154,6 +163,29 @@ function getMirrorLogEntryPushMapping( $row ) {
 	    'logpage' => 'mbq_page_id',
             'logdeleted' => 'mbq_deleted',
             'tstags' => 'mbq_tags'
+      );
+      return $pushMapping;
+}
+
+function getMirrorMovePushMapping ( $row ) {
+      $pushMapping = array(
+	    'logid' => 'mbq_log_id',
+	    'logtimestamp' => 'mbq_timestamp',
+	    'loguser' => 'mbq_user', // This will actually be left as zero
+            'logusertext' => 'mbq_user_text',
+	    'lognamespace' => 'mbq_namespace',
+	    'logtitle' => 'mbq_title',
+	    'logcomment' => 'mbq_comment',
+	    'logparams' => 'mbq_log_params',
+	    'logpage' => 'mbq_page_id',
+            'logdeleted' => 'mbq_deleted',
+            'tstags' => 'mbq_tags',
+            'rcid' => 'mbq_rc_id',
+            'rcbot' => 'mbq_rc_bot',
+            'rcpatrolled' => 'mbq_rc_patrolled',
+            'comment2' => 'mbq_comment2', // Comment to use in the redirect and null revision
+            'nullrevid' => 'mbq_rev_id',
+            'redirrevid' => 'mbq_rev_id2'
       );
       return $pushMapping;
 }

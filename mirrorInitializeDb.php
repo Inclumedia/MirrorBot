@@ -4,14 +4,14 @@ $defaultsFile = 'inclubot_defaults.php';
 if ( !file_exists ( $defaultsFile ) ) {
       die ( "File $defaultsFile does not exist\n" );
 }
-include( 'inclubot_defaults.php' );
+require_once( 'inclubot_defaults.php' );
 
 // Get the passwords
 $passwordFile = $passwordPath . "inclubot_passwords.php";
 if ( !file_exists ( $passwordFile ) ) {
       die ( "File $passwordFile does not exist\n" );
 }
-include( $passwordFile );
+require_once( $passwordFile );
 
 // Connect to database
 $db = new mysqli( $host, $dbUser, $dbPass );
