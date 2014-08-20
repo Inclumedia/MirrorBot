@@ -55,10 +55,10 @@ if ( !isset ( $options['r'] ) ) {
 
 /* Set up bot classes. */
 require_once( 'mirrorInitializeDb.php' );
-require_once("$botClassesPath/botclasses.php");
+require_once( "$botClassesPath/botclasses.php" );
 $wiki      = new wikipedia;
 $wiki->setUserAgent( $userAgent );
-$wiki->url = $localWikiUrl;
+$wiki->url = $localWikiUrl[$localWikiName];
 $wiki->login( $pushUser, $pushPass );
 $token = urlencode ( $wiki->getedittoken() );
 $wiki->__set('quiet','soft'); // Some long URLs will cause problems

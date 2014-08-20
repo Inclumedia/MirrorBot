@@ -1,11 +1,28 @@
 <?php
-$localWikiName = 'test102';
-$remoteWikiName = 'test103';
-// MirrorBot API url
-$localWikiUrl = "http://localhost/test102/w/api.php";
+$localWikiName = 'test112';
+$remoteWikiName = 'test113';
+$localWikiUrl = array(
+    'test112' => "http://localhost/test112/w/api.php"
+);
 $remoteWikiUrl = array(
-    'test103' => "http://localhost/test103/w/api.php",
+    'test113' => "http://localhost/test113/w/api.php",
     'enwiki' => "http://en.wikipedia.org/w/api.php"
+);
+$botClassesPath = "/home/nathan/Chris-G-botclasses";
+$mirrorBotPath = "/home/nathan/MirrorBot/";
+$passwordPath = $mirrorBotPath . "passwords/";
+$databasesPath = $mirrorBotPath . "databases/";
+$scenariosPath = $mirrorBotPath . "scenarios/";
+$tables = array(
+    'mb_queue' => 'mb_queue.sql',
+    'mb_text' => 'mb_text.sql',
+    'mb_cursor' => 'mb_cursor.sql'
+);
+$indexFiles = array(
+    'mb_queue' => array(
+        'mbq_rc_id-index.sql',
+        'mbq_status-index.sql'
+    )
 );
 $defaultMicroseconds = array(
     'pull' => array (
@@ -14,21 +31,8 @@ $defaultMicroseconds = array(
     ),
     'push' => 1000 * 1000
 );
-$botClassesPath = "/home/nathan/Chris-G-botclasses";
-$mirrorBotPath = "/home/nathan/MirrorBot/";
-$passwordPath = $mirrorBotPath . "passwords/";
-$databasesPath = $mirrorBotPath . "databases/";
-$scenariosPath = $mirrorBotPath . "scenarios/";
-$tables = array(
-    'mb_queue' => 'mb-queue.sql',
-    'mb_text' => 'mb-text.sql',
-    'mb_cursor' => 'mb-cursor.sql'
-);
-$indexFiles = array(
-    'mb_queue' => array( 'mb-queue-indices.sql' )
-);
 $defaultStart = array( // rcstart parameter
-    'rc' => '2014-07-15T21:47:37Z'
+    'rc' => '2014-08-15T00:00:00Z'
 );
 // Every log entry before this timestamp, qrc and pushbot will treat as a mirrorlogentry; every log
 // entry after, they will treat as a mirrormove, etc. Also, logPuller will not import anything

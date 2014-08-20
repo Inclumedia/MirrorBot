@@ -81,6 +81,9 @@ $wiki      = new wikipedia;
 $wiki->url = $remoteWikiUrl[$remoteWikiName];
 
 // Login
+if ( !isset( $pullUser[$remoteWikiName] ) || !isset( $pullPass[$remoteWikiName] ) ) {
+      die( "No login credentials for $remoteWikiName" );
+}
 $wiki->login( $pullUser[$remoteWikiName], $pullPass[$remoteWikiName] );
 
 $passes = 0; // Which part of the loop are we on?

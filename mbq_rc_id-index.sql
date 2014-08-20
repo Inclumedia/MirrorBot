@@ -1,0 +1,1 @@
+CREATE INDEX mbq_rc_id ON mb_queue (mbq_rc_id);

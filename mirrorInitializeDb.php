@@ -1,13 +1,13 @@
 <?php
 // Get the defaults
-$defaultsFile = 'inclubot_defaults.php';
+$defaultsFile = 'mirrorbot_defaults.php';
 if ( !file_exists ( $defaultsFile ) ) {
       die ( "File $defaultsFile does not exist\n" );
 }
-require_once( 'inclubot_defaults.php' );
+require_once( $defaultsFile );
 
 // Get the passwords
-$passwordFile = $passwordPath . "inclubot_passwords.php";
+$passwordFile = $passwordPath . "mirrorbot_passwords.php";
 if ( !file_exists ( $passwordFile ) ) {
       die ( "File $passwordFile does not exist\n" );
 }
