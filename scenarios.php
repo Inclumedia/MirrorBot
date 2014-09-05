@@ -1,6 +1,6 @@
 <?php
 require_once( 'mirrorInitializeDb.php' );
-$databases = array( $dbName, $localWikiName, $remoteWikiName );
+$databases = array( $passwordConfig->dbName, $config->localWikiName, $config->remoteWikiName );
 $commands = array( 'S', 'R', 'D' );
 echo "\nMain menu:\n";
 echo "(S) Save scenario\n";
@@ -14,22 +14,22 @@ if ( !in_array( $command, $commands ) ) {
 }
 
 $first = true;
-$dirs = glob( $scenariosPath . '*' , GLOB_ONLYDIR );
+$dirs = glob( $config->scenariosPath . '*' , GLOB_ONLYDIR );
 if ( !$dirs ) {
-    echo "Creating directory $scenariosPath...\n";
-    exec( "mkdir $scenariosPath" );
+    echo "Creating directory " . $config->scenariosPath . "...\n";
+    exec( "mkdir " . $config->scenariosPath );
 }
 $names = array();
 foreach ( $dirs as $dir ) {
-    if ( $dir == $scenariosPath ) {
+    if ( $dir == $config->scenariosPath ) {
         continue;
     }
     if ( $first ) {
         echo "\nScenarios:\n";
         $first = false;
     }
-    $name = substr( $dir, strlen( $scenariosPath ),
-        strlen( $dir ) - strlen( $scenariosPath ) );
+    $name = substr( $dir, strlen( $config->scenariosPath ),
+        strlen( $dir ) - strlen( $config->scenariosPath ) );
     $names[] = $name;
     echo $name . "\n";
 }
@@ -41,7 +41,8 @@ if ( !$scenario ) {
 switch ( $command ) {
     case 'R':
         foreach ( $databases as $database ) {
-            restoreDb( $dbUser, $dbPass, $scenariosPath . "$scenario/", $database, $scenario );
+            restoreDb( $passwordConfig->dbUser, $passwordConfig->dbPass, $config->scenariosPath
+                . "$scenario/", $database, $scenario );
         }
         break;
     case 'S':
@@ -51,11 +52,12 @@ switch ( $command ) {
                 die( "Aborted\n" );
             }
         } else {
-            echo "Making directory $scenariosPath" . "$scenario...\n";
-            exec( "mkdir $scenariosPath" . "$scenario" );
+            echo "Making directory " . $config->scenariosPath . "$scenario...\n";
+            exec( "mkdir " . $config->scenariosPath . "$scenario" );
         }
         foreach ( $databases as $database ) {
-            saveDb( $dbUser, $dbPass, $scenariosPath . "$scenario/", $database, $scenario );
+            saveDb( $passwordConfig->dbUser, $passwordConfig->dbPass, $config->scenariosPath
+            . "$scenario/", $database, $scenario );
         }
         break;
     case 'D':
@@ -66,8 +68,8 @@ switch ( $command ) {
             if ( substr( $overwrite, 0, 1 ) != 'Y' && substr( $overwrite, 0, 1 ) != 'y' ) {
                 die( "Aborted\n" );
             }
-            echo "Deleting directory $scenariosPath" . "$scenario...\n";
-            exec( "rm -rf $scenariosPath" . "$scenario" );
+            echo "Deleting directory " . $config->scenariosPath . "$scenario...\n";
+            exec( "rm -rf " . $config->$scenariosPath . "$scenario" );
         }
         break;
 }

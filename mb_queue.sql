@@ -53,10 +53,12 @@ mbq_rc_anon tinyint UNSIGNED NOT NULL DEFAULT 0,
 mbq_rc_bot tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- id
 mbq_rc_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- id2
+mbq_rc_id2 INT UNSIGNED NOT NULL DEFAULT 0,
 -- ip
 mbq_rc_ip varbinary(40) NOT NULL default '',
 -- revoldid
-mbq_rc_last_oldidid INT UNSIGNED NOT NULL DEFAULT 0,
+mbq_rc_last_oldid INT UNSIGNED NOT NULL DEFAULT 0,
 -- new
 mbq_rc_new tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- oldlen
