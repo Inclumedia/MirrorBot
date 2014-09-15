@@ -53,8 +53,9 @@ foreach ( $config->tables as $table => $sqlFile ) {
             }
             echo "done.\n";
             if( isset( $config->indexFiles[$table] ) ) {
-                  echo "Creating indices for $table...";
-                  foreach( $config->indexFiles[$table] as $indexFile ) {
+                  echo "Creating indices for $table...\n";
+                  foreach( $config->indexFiles[$table] as $indexKey => $indexFile ) {
+                        echo "Creating $indexKey...";
                         if ( !file_exists( $indexFile ) ) {
                               die( "Error: file $indexFile missing!\n" );
                         }
@@ -92,9 +93,13 @@ class mirrorGlobalFunctions {
 
       public static function doQuery( $db, $config, $query, $action, $failureInfos = null ) {
             $status = $db->query( $query );
+            $maxQueryStrlenToLog = 1024; // If it's longer than this, don't log it
             if ( !$status ) {
                   mirrorGlobalFunctions::logFailure( $config, "Failure $action\n" );
                   mirrorGlobalFunctions::logFailure( $config, $db->error_list );
+                  if ( strlen( $query ) < $maxQueryStrlenToLog ) {
+                        mirrorGlobalFunctions::logFailure( $config, $query );
+                  }
                   if ( $failureInfos ) {
                         if ( !is_array ( $failureInfos ) ) {
                               $failureInfos = array( $failureInfos );

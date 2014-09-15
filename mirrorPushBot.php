@@ -61,10 +61,12 @@ require_once( $config->botClassesPath . "/botclasses.php" );
 $wiki      = new wikipedia;
 $wiki->setUserAgent( $passwordConfig->userAgent );
 $wiki->url = $config->localWikiUrl[$config->localWikiName];
-$wiki->login( $passwordConfig->pushUser, $passwordConfig->pushPass );
+$wiki->login( $passwordConfig->pushUser[$config->localWikiName],
+      $passwordConfig->pushPass[$config->localWikiName] );
 $token = urlencode( $wiki->getedittoken() );
 // Some long URLs will cause problems if we try to display the whole thing
 $wiki->__set( 'quiet','soft' );
+$wiki->echoRet = true;
 
 $keepGoing = true;
 $offset = 0;
@@ -83,7 +85,7 @@ while ( $keepGoing ) {
             continue;
       }
       $row = $mbRet->fetch_assoc();
-      if ( $row['mbq_status'] == 'needsrev' || $row['mbq_status'] == 'needsrevids' ) {
+      if ( in_array( $row['mbq_status'], $config->waitStatuses ) ) {
             echo "Reached a " . $row['mbq_status']
                   . " row! Waiting for mirrorPullBot to add the necessary data...\n";
             usleep( $config->defaultMicroseconds['push'] );
@@ -198,6 +200,17 @@ while ( $keepGoing ) {
                   $textRow = $textRet->fetch_assoc();
                   $data['oldtext'] = $textRow['mbt_text'];
                   break;
+            case 'mirrornorcedit':
+                  $pushMapping = getMirrorNorcEditPushMapping( $row );
+                  $row['mbq_rc_id'] = 0;
+                  $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id'];
+                  $textRet = $db->query( $query );
+                  if ( !$textRet || !$textRet->num_rows ) {
+                        die( "mbt_id " . $row['mbq_text_id'] . " not found in mb_text!\n" );
+                  }
+                  $textRow = $textRet->fetch_assoc();
+                  $data['oldtext'] = $textRow['mbt_text'];
+                  break;
             default:
                   // Development code that will cause problems in production
                   #$offset = $row['mbq_id'];
@@ -270,6 +283,7 @@ function getMirrorLogEntryPushMapping( $row ) {
 function getMirrorMovePushMapping ( $row ) {
       $pushMapping = array(
 	    'logid' => 'mbq_log_id',
+            'logaction' => 'mbq_log_action',
 	    'logtimestamp' => 'mbq_timestamp',
 	    'loguser' => 'mbq_user', // This will actually be left as zero
             'logusertext' => 'mbq_user_text',
@@ -286,7 +300,8 @@ function getMirrorMovePushMapping ( $row ) {
             'comment2' => 'mbq_comment2', // Comment to use in the redirect and null revision
             'nullrevid' => 'mbq_rev_id',
             'nullrevparentid' => 'mbq_rc_last_oldid',
-            'redirrevid' => 'mbq_rev_id2'
+            'redirectrevid' => 'mbq_rev_id2',
+            'redirectpageid' => 'mbq_page_id2'
       );
       return $pushMapping;
 }

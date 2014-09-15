@@ -1,26 +1,28 @@
 <?php
 class config {
-    public $localWikiName = 'test112';
-    public $remoteWikiName = 'test113';
+    public $localWikiName = 'test116';
+    public $remoteWikiName = 'test117';
     public $localWikiUrl = array(
-        'test112' => "http://localhost/test112/w/api.php"
+        'test116' => "http://localhost/test116/w/api.php"
     );
     public $remoteWikiUrl = array(
-        'test113' => "http://localhost/test113/w/api.php",
+        'test117' => "http://localhost/test117/w/api.php",
         'enwiki' => "http://en.wikipedia.org/w/api.php"
     );
     public $botClassesPath = "/home/nathan/Chris-G-botclasses";
     public $mirrorBotPath = "/home/nathan/MirrorBot/";
+    // Add these tables, and drop them when dropAll.php is run
     public $tables = array(
         'mb_queue' => 'mb_queue.sql',
         'mb_text' => 'mb_text.sql',
         'mb_cursor' => 'mb_cursor.sql'
     );
+    // Add these indexes
     public $indexFiles = array(
         'mb_queue' => array(
-            'mbq_rc_id-index.sql',
-            'mbq_timestamp-index.sql',
-            'mbq_status-index.sql'
+            'mbq_rc_id' => 'mbq_rc_id-index.sql',
+            'mbq_timestamp' => 'mbq_timestamp-index.sql',
+            'mbq_status' => 'mbq_status-index.sql'
         )
     );
     public $defaultStart = array( // rcstart parameter
@@ -117,7 +119,7 @@ class config {
         'pagerestorerevids' => array(
             'mbq_action' => 'mbqaction',
             'mbq_status' => 'mbqstatus',
-            'mbq_rc_id2' => 'mbqrcid2',
+            'mbq_rc_id' => 'mbqrcid',
             'mbq_rev_id' => 'revid',
             'mbq_rc_last_oldid' => 'parentid',
             'mbq_user' => 'userid',
@@ -131,6 +133,7 @@ class config {
             'mbq_namespace' => 'namespace',
         )
     );
+    // Used by mirrorPullBot
     public $stringFields = array(
         'rc' => array(
             'mbqaction',
@@ -158,6 +161,7 @@ class config {
             'contentmodel'
         )
     );
+    // Used by mirrorPullBot
     public $booleanFields = array(
         'rc' => array(
             'anon',
@@ -168,6 +172,7 @@ class config {
             'redirect'
         )
     );
+    // Used by mirrorPullBot
     public $defaultFields = array(
         'rc' => array(
             'mbqaction' => "''",
@@ -202,14 +207,20 @@ class config {
             'sha1' => "''"
         )
     );
-    // Log actions and their mirrortools counterparts
-    public $mirrorActions = array(
-        'move' => 'mirrormove',
-        'delete' => 'mirrordelete',
-        'restore' => 'mirrorpagerestore'
+    // Log actions and their mirrortools counterparts; used by mirrorPullBot
+    public $mirrorTypeActions = array(
+        'move' => array(
+            'move' => 'mirrormove',
+            'move_redir' => 'mirrormove',
+        ),
+        'delete' => array(
+            'delete' => 'mirrordelete',
+            'restore' => 'mirrorpagerestore'
+        )
     );
     // Namespaces to truncate
     public $namespacesToTruncate = array(
+        0 => '',
         1 => 'Talk:',
         2 => 'User:',
         3 => 'User talk:',
@@ -238,10 +249,26 @@ class config {
         828 => 'Module:',
         829 => 'Module talk:'
     );
+    // Used for rc_source
     public $sources = array(
         'new' => 'mw.new',
         'edit' => 'mw.edit',
         'log' => 'mw.log'
+    );
+    // Empty these tables when emptyAll.php is run
+    public $tablesToTruncate = array(
+        'logging',
+        'log_search',
+        'page',
+        'recentchanges',
+        'revision'
+    );
+    // When the pushbot hits these, it will wait till the pullbot resolves these rows
+    public $waitStatuses = array(
+        'needsrev',
+        'needsrevids',
+        'needsmovenullrev',
+        'needsmoveredirectrev'
     );
 
     function __construct() {

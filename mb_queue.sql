@@ -34,6 +34,8 @@ mbq_minor tinyint UNSIGNED NOT NULL DEFAULT 0,
 mbq_namespace INT NOT NULL DEFAULT 0,
 -- page_id, rc_cur_id, rev_page; pageid (from api rc)
 mbq_page_id int unsigned NOT NULL,
+-- page ID of redirect
+mbq_page_id2 int unsigned DEFAULT 0,
 -- rc_this_oldid, rev_id; revid (from api rc)
 mbq_rev_id INT UNSIGNED NOT NULL DEFAULT 0,
 -- redirect rev id (from api rev)
