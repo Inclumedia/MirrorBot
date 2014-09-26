@@ -112,4 +112,26 @@ class mirrorGlobalFunctions {
             echo "Success $action\n";
             return $status;
       }
+
+      // This implementation kinda sucks; it just searches for the word "#redirect"
+      public static function isRedirect( $config, $text ) {
+            return strpos(
+                  strtolower( $text ),
+                  strtolower( $config->remoteWikiRedirectString[$config->remoteWikiName] )
+            );
+      }
+
+      public static function addUndesirables( $timestamp ) {
+            return substr( $timestamp, 0, 4 ) . '-'
+                  . substr( $timestamp, 4, 2 ) . '-'
+                  . substr( $timestamp, 6, 2 ) . 'T'
+                  . substr( $timestamp, 8, 2 ) . ':'
+                  . substr( $timestamp, 10, 2 ) . ':'
+                  . substr( $timestamp, 12, 2 ) . 'Z';
+      }
+
+      public static function killUndesirables( $timestamp ) {
+            $undesirables = array ( '-', ':', 'T', 'Z' );
+            return str_replace ( $undesirables, '', $timestamp );
+      }
 }

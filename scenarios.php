@@ -69,7 +69,7 @@ switch ( $command ) {
                 die( "Aborted\n" );
             }
             echo "Deleting directory " . $config->scenariosPath . "$scenario...\n";
-            exec( "rm -rf " . $config->$scenariosPath . "$scenario" );
+            exec( "rm -rf " . $config->scenariosPath . "$scenario" );
         }
         break;
 }

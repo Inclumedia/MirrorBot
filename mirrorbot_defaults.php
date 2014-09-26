@@ -9,6 +9,11 @@ class config {
         'test117' => "http://localhost/test117/w/api.php",
         'enwiki' => "http://en.wikipedia.org/w/api.php"
     );
+    // a strpos() will use this to determine if the contents have a redirect; kind of an
+    // inadequate hack
+    public $remoteWikiRedirectString = array(
+        'test117' => "#redirect"
+    );
     public $botClassesPath = "/home/nathan/Chris-G-botclasses";
     public $mirrorBotPath = "/home/nathan/MirrorBot/";
     // Add these tables, and drop them when dropAll.php is run
@@ -28,14 +33,15 @@ class config {
     public $defaultStart = array( // rcstart parameter
         'rc' => '2014-08-15T00:00:00Z'
     );
-    // Every log entry before this timestamp, qrc and pushbot will treat as a mirrorlogentry; every log
-    // entry after, they will treat as a mirrormove, etc. Also, logPuller will not import anything
-    // beyond this cutoff into the queue.
+    // Every log entry before this timestamp, qrc and pushbot will treat as a mirrorlogentry;
+    // every log entry after, they will treat as a mirrormove, etc. Also, logPuller will not
+    // import anything beyond this cutoff into the queue
     public $importCutoff = '20140720000000';
     public $failureLogFile = "failures.txt";
     public $rcLimit = 5; // Grab 500 recentchanges at a time
     public $revLimit = 500; // Grab 500 revisions at a time
     public $makeRemotelyLiveLimit = 500; // Do 500 makeremotelive items at a time
+    public $iiLimit = 500; // Do 500 imageinfo items at a time
     public $dbDefaults = array( // These are for xmlReader.php
         'mbq_text_id' => 0,
         'mbq_push_timestamp' => "''",
@@ -68,7 +74,6 @@ class config {
         'mbq_rev_content_model' => 'NULL',
         'mbq_rev_content_format' => 'NULL',
         'mbq_rev_sha1' => "''",
-        'mbq_page_is_redirect' => 0,
         'mbq_tags' => "''"
     );
     // Used by the pullbot
@@ -77,6 +82,7 @@ class config {
             'mbq_action' => 'mbqaction',
             'mbq_status' => 'mbqstatus',
             'mbq_deleted' => 'mbqdeleted',
+            'mbq_params2' => 'mbqparams2',
             'mbq_rc_source' => 'mbqrcsource',
             'mbq_rc_ip' => 'mbqrcip',
             'mbq_rc_id' => 'rcid',
@@ -96,7 +102,6 @@ class config {
             'mbq_rc_patrolled' => 'patrolled',
             'mbq_rev_id' => 'revid',
             'mbq_rc_last_oldid' => 'old_revid',
-            'mbq_page_is_redirect' => 'redirect',
             'mbq_timestamp' => 'timestamp',
             'mbq_title' => 'title',
             'mbq_rc_type' => 'type',
@@ -131,6 +136,7 @@ class config {
             'mbq_comment' => 'comment',
             'mbq_title' => 'title',
             'mbq_namespace' => 'namespace',
+            'mbq_page_id' => 'pageid',
         )
     );
     // Used by mirrorPullBot
@@ -138,6 +144,7 @@ class config {
         'rc' => array(
             'mbqaction',
             'mbqstatus',
+            'mbqparams2',
             'mbqrcip',
             'mbqrcsource',
             'title',
@@ -161,6 +168,10 @@ class config {
             'contentmodel'
         )
     );
+    public $timestampFields = array(
+        'timestamp',
+        'img_timestamp'
+    );
     // Used by mirrorPullBot
     public $booleanFields = array(
         'rc' => array(
@@ -179,6 +190,7 @@ class config {
             'mbqstatus' => "''",
             'mbqdeleted' => 0,
             'mbqrcip' => "''",
+            'mbqparams2' => "''",
             'rcid' => 0,
             'anon' => 0,
             'bot' => 0,
@@ -210,44 +222,153 @@ class config {
     // Log actions and their mirrortools counterparts; used by mirrorPullBot
     public $mirrorTypeActions = array(
         'move' => array(
-            'move' => 'mirrormove',
-            'move_redir' => 'mirrormove',
+            'move' => array(
+                'mirroraction' => 'mirrormove',
+                'status' => 'needsmovenullrev'
+            ),
+            'move_redir' => array(
+                'mirroraction' => 'mirrormove',
+                'status' => 'needsmovenullrev'
+            ),
         ),
         'delete' => array(
-            'delete' => 'mirrordelete',
-            'restore' => 'mirrorpagerestore'
+            'delete' => array(
+                'mirroraction' => 'mirrordelete',
+                'status' => 'readytopush'
+            ),
+            'restore' => array(
+                'mirroraction' => 'mirrorpagerestore',
+                'status' => 'needspagerestorerevids'
+            ),
+        ),
+        'import' => array(
+            'upload' => array(
+                'mirroraction' => 'mirrorimport',
+                'status' => 'needsimportrevids'
+            ),
+            'interwiki' => array(
+                'mirroraction' => 'mirrorimport',
+                'status' => 'needsimportrevids'
+            )
+        ),
+        'merge' => array(
+            'merge' => array(
+                'mirroraction' => 'mirrormerge',
+                'status' => 'needsmergeredirectrev',
+            )
+        ),
+        'protect' => array(
+            'protect' => array(
+                'mirroraction' => 'mirrorprotect',
+                'status' => 'needsprotectnullrev',
+            ),
+            'modify' => array(
+                'mirroraction' => 'mirrorprotect',
+                'status' => 'needsprotectnullrev',
+            ),
+            'unprotect' => array(
+                'mirroraction' => 'mirrorprotect',
+                'status' => 'needsprotectnullrev',
+            )
+        ),
+        'upload' => array(
+            'upload' => array(
+                'mirroraction' => 'mirrorupload',
+                'status' => 'needsuploadnullrev',
+            ),
+            'overwrite' => array(
+                'mirroraction' => 'mirrorupload',
+                'status' => 'needsuploadnullrev',
+            )
+        )
+    );
+    // What to switch the status to after getting the null revision
+    public $nullRevStatus = array(
+        'needsuploadnullrev' => 'needsimageinfo',
+        'needsprotectnullrev' => 'readytopush',
+        // If there's a redirect, it'll be needsmoveredirectrev
+        'needsmovenullrev' => 'readytopush'
+    );
+    // mirrorPullBot stuff
+            // r<number of microsecs to sleep>
+            // "s" starting timestamp
+    public $allowableOptions = array(
+        'q' => array(
+            'rc',
+            'rev',
+            'nullrev',
+            'redirectrev',
+            'revids',
+            'imageinfo',
+            'imagedownload',
+            'rcrev'
+        ), 'r' => array(
+            'o',
+            'd',
         )
     );
     // Namespaces to truncate
     public $namespacesToTruncate = array(
-        0 => '',
-        1 => 'Talk:',
-        2 => 'User:',
-        3 => 'User talk:',
-        4 => 'Wikipedia:',
-        5 => 'Wikipedia talk:',
-        6 => 'File:',
-        7 => 'File talk:',
-        8 => 'MediaWiki:',
-        9 => 'MediaWiki talk:',
-        10 => 'Template:',
-        11 => 'Template talk:',
-        12 => 'Help:',
-        13 => 'Help talk:',
-        14 => 'Category:',
-        15 => 'Category talk:',
-        100 => 'Portal:',
-        101 => 'Portal talk:',
-        108 => 'Book:',
-        109 => 'Book talk:',
-        118 => 'Draft:',
-        119 => 'Draft talk:',
-        446 => 'EducationProgram:',
-        447 => 'EducationProgram talk:',
-        710 => 'TimedText:',
-        711 => 'TimedText talk:',
-        828 => 'Module:',
-        829 => 'Module talk:'
+        'test116' => array(
+            0 => '',
+            1 => 'Talk:',
+            2 => 'User:',
+            3 => 'User talk:',
+            4 => 'Wikipedia:',
+            5 => 'Wikipedia talk:',
+            6 => 'File:',
+            7 => 'File talk:',
+            8 => 'MediaWiki:',
+            9 => 'MediaWiki talk:',
+            10 => 'Template:',
+            11 => 'Template talk:',
+            12 => 'Help:',
+            13 => 'Help talk:',
+            14 => 'Category:',
+            15 => 'Category talk:',
+            100 => 'Portal:',
+            101 => 'Portal talk:',
+            108 => 'Book:',
+            109 => 'Book talk:',
+            118 => 'Draft:',
+            119 => 'Draft talk:',
+            446 => 'EducationProgram:',
+            447 => 'EducationProgram talk:',
+            710 => 'TimedText:',
+            711 => 'TimedText talk:',
+            828 => 'Module:',
+            829 => 'Module talk:'
+        ),
+        'test117' => array(
+            0 => '',
+            1 => 'Talk:',
+            2 => 'User:',
+            3 => 'User talk:',
+            4 => 'Wikipedia:',
+            5 => 'Wikipedia talk:',
+            6 => 'File:',
+            7 => 'File talk:',
+            8 => 'MediaWiki:',
+            9 => 'MediaWiki talk:',
+            10 => 'Template:',
+            11 => 'Template talk:',
+            12 => 'Help:',
+            13 => 'Help talk:',
+            14 => 'Category:',
+            15 => 'Category talk:',
+            100 => 'Portal:',
+            101 => 'Portal talk:',
+            108 => 'Book:',
+            109 => 'Book talk:',
+            118 => 'Draft:',
+            119 => 'Draft talk:',
+            446 => 'EducationProgram:',
+            447 => 'EducationProgram talk:',
+            710 => 'TimedText:',
+            711 => 'TimedText talk:',
+            828 => 'Module:',
+            829 => 'Module talk:'
+        )
     );
     // Used for rc_source
     public $sources = array(
@@ -268,9 +389,43 @@ class config {
         'needsrev',
         'needsrevids',
         'needsmovenullrev',
-        'needsmoveredirectrev'
+        'needsprotectnullrev',
+        'needsmoveredirectrev',
+        'needsmergeredirectrev'
     );
-
+    // Used to get the timestamp from the API module
+    public $mirrorPushModules = array(
+        'mirrordelete',
+        'mirroredit',
+        'mirrorlogentry',
+        'mirrormerge',
+        'mirrormove'
+    );
+    // These have revision or null revision text
+    public $textActions = array(
+        'mirroredit',
+        'mirrorprotect'
+    );
+    // These have redirect revision text
+    public $redirectRevActions = array(
+        'mirrormerge',
+        'mirrormove'
+    );
+    public $params2 = array(
+        'rc' => array(
+            'img_timestamp'
+        ),
+        'imageinfo' => array(
+            'size',
+            'width',
+            'height',
+            'url',
+            'mime',
+            'meditatype',
+            'bitdepth',
+            'metadata'
+        )
+    );
     function __construct() {
         $this->passwordPath = $this->mirrorBotPath . "passwords/";
         $this->databasesPath = $this->mirrorBotPath . "databases/";

@@ -92,22 +92,22 @@ while ( $keepGoing ) {
             continue;
       }
       if ( $row['mbq_status'] == 'needsmakeremotelylive' ) {
-            if ( isset( $row['mbq_rc_id'] ) && $row['mbq_rc_id'] ) {
-                  $rcIdForQuery = $row['mbq_rc_id'];
-            } else {
-                  $rcIdForQuery = $row['mbq_rc_id2'];
-            }
+            // We can either get this data from the log row or the needsmakeremotelylive rows
+            $rcIdForQuery = $row['mbq_rc_id'];
             // Get 500 rows of these
             $query = "SELECT * FROM mb_queue WHERE mbq_status='needsmakeremotelylive' "
                   . "AND mbq_action='makeremotelylive' "
-                  . "AND mbq_rc_id2=" . $rcIdForQuery
-                  . " ORDER BY mbq_timestamp ASC LIMIT 500";
+                  . "AND mbq_rc_id=" . $rcIdForQuery
+                  . " LIMIT 500";
             $ret = mirrorGlobalFunctions::doQuery( $db, $config, $query,
                   'queueing up makeremotelylive records' );
             if ( !$ret or !$ret->num_rows ) {
-                  echo "No makeremotelyliverecords rows!\n";
+                  echo "No makeremotelylive rows!\n";
                   $query = "UPDATE mb_queue SET mbq_status='readytopush',"
-                        . "mbq_action='mirrorlogentry' WHERE mbq_id=" . $row['mbq_id'];
+                        . "mbq_action='mirrorlogentry' WHERE "
+                        . "(mbq_action='mirrorimport' OR "
+                        . "mbq_action='mirrorpagerestore') AND "
+                        . "mbq_rc_id=" . $row['mbq_rc_id'];
                   $ret = mirrorGlobalFunctions::doQuery( $db, $config, $query,
                         'setting mirrorpagerestore row to mirrorlogentry readytopush' );
                   continue;
@@ -136,7 +136,7 @@ while ( $keepGoing ) {
             if ( isset( $ret['makeremotelylive']['badrevids'] ) ) {
                   $badRevs = $ret['makeremotelylive']['badrevids'];
                   $isFirst = true;
-                  $where = 'WHERE mbq_rc_id2=' . $rcIdForQuery . ' AND (';
+                  $where = 'WHERE mbq_rc_id=' . $rcIdForQuery . ' AND (';
                   foreach ( $badRevs as $badRev ) {
                         if ( !$isFirst ) {
                               $where .= ' OR ';
@@ -146,7 +146,7 @@ while ( $keepGoing ) {
                   }
                   $where .= ')';
                   $query = 'UPDATE mb_queue SET '
-                        . "mbq_action='mirroredit'"
+                        . "mbq_action='mirrornorcedit'"
                         . ",mbq_status='needsrev' "
                         . $where
                         . " AND mbq_action='makeremotelylive'";
@@ -156,7 +156,7 @@ while ( $keepGoing ) {
             if ( isset( $ret['makeremotelylive']['remotelyliverevids'] ) ) {
                   $remotelyLiveRevs = $ret['makeremotelylive']['remotelyliverevids'];
                   $isFirst = true;
-                  $where = 'WHERE mbq_rc_id2=' . $rcIdForQuery . ' AND (';
+                  $where = 'WHERE mbq_rc_id=' . $rcIdForQuery . ' AND (';
                   foreach ( $remotelyLiveRevs as $remotelyLiveRev ) {
                         if ( !$isFirst ) {
                               $where .= ' OR ';
@@ -179,10 +179,33 @@ while ( $keepGoing ) {
       $pushMapping = null;
       $continueThis = false;
       $data = array();
+      if ( $action === 'mirrornorcedit' ) {
+            $row['mbq_rc_id'] = 0;
+            $action = 'mirroredit';
+      }
+      if ( in_array( $action, $config->textActions ) ) {
+            $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id'];
+            $textRet = $db->query( $query );
+            if ( !$textRet || !$textRet->num_rows ) {
+                  die( "mbt_id " . $row['mbq_text_id'] . " not found in mb_text!\n" );
+            }
+            $textRow = $textRet->fetch_assoc();
+            $data['oldtext'] = $textRow['mbt_text'];
+      }
+      if ( in_array( $action, $config->redirectRevActions ) && $row['mbq_text_id2'] ) {
+            $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id2'];
+            $textRet = $db->query( $query );
+            if ( !$textRet || !$textRet->num_rows ) {
+                  die( "mbt_id " . $row['mbq_text_id2'] . " not found in mb_text!\n" );
+            }
+            $textRow = $textRet->fetch_assoc();
+            $data['oldtext2'] = $textRow['mbt_text'];
+      }
+      $row['mbq_rc_type'] = 3;
+      $row['mbq_user'] = 0;
       switch ( $action ) {
             case 'mirrorlogentry':
                   $pushMapping = getMirrorLogEntryPushMapping( $row );
-                  $row['mbq_user'] = '0';
                   break;
             case 'mirrormove':
                   $pushMapping = getMirrorMovePushMapping( $row );
@@ -190,31 +213,21 @@ while ( $keepGoing ) {
             case 'mirrordelete':
                   $pushMapping = getMirrorDeletePushMapping( $row );
                   break;
+            case 'mirrormerge':
+                  $pushMapping = getMirrorMergePushMapping( $row );
+                  break;
+            case 'mirrorprotect':
+                  $pushMapping = getMirrorLogEntryPushMapping( $row );
+                  $action = 'mirrorlogentry';
+                  break;
             case 'mirroredit':
                   $pushMapping = getMirrorEditPushMapping( $row );
-                  $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id'];
-                  $textRet = $db->query( $query );
-                  if ( !$textRet || !$textRet->num_rows ) {
-                        die( "mbt_id " . $row['mbq_text_id'] . " not found in mb_text!\n" );
-                  }
-                  $textRow = $textRet->fetch_assoc();
-                  $data['oldtext'] = $textRow['mbt_text'];
-                  break;
-            case 'mirrornorcedit':
-                  $pushMapping = getMirrorNorcEditPushMapping( $row );
-                  $row['mbq_rc_id'] = 0;
-                  $query = "SELECT * FROM mb_text WHERE mbt_id=" . $row['mbq_text_id'];
-                  $textRet = $db->query( $query );
-                  if ( !$textRet || !$textRet->num_rows ) {
-                        die( "mbt_id " . $row['mbq_text_id'] . " not found in mb_text!\n" );
-                  }
-                  $textRow = $textRet->fetch_assoc();
-                  $data['oldtext'] = $textRow['mbt_text'];
                   break;
             default:
                   // Development code that will cause problems in production
                   #$offset = $row['mbq_id'];
                   echo "Reached a " . $row['mbq_action'] . " row; continuing...\n";
+                  usleep( $config->defaultMicroseconds['push'] );
                   $continueThis = true;
       }
       if ( $continueThis ) {
@@ -229,20 +242,24 @@ while ( $keepGoing ) {
       if ( !$localRet ) {
             die ( "Nothing was returned\n" );
       }
-      if ( isset( $localRet['error' ] ) ) {
+      if ( isset( $localRet['error'] ) ) {
             die( "The " . $config->localWikiName . " API returned an error message!\n" );
       }
-      if ( isset( $localRet['mirrorlogentry']['timestamp'] ) ) {
-            $pushTimestamp = $localRet['mirrorlogentry']['timestamp'];
+      $pushTimestamp = null;
+      $result = null;
+      foreach( $config->mirrorPushModules as $mirrorPushModule ) {
+            if ( isset( $localRet[$mirrorPushModule]['timestamp'] ) ) {
+                  $pushTimestamp = $localRet[$mirrorPushModule]['timestamp'];
+            }
+            if ( isset( $localRet[$mirrorPushModule]['result'] ) ) {
+                  $result = $localRet[$mirrorPushModule]['result'];
+            }
       }
-      if ( isset( $localRet['mirroredit']['timestamp'] ) ) {
-            $pushTimestamp = $localRet['mirroredit']['timestamp'];
+      if ( $result != 'Success' ) {
+            die( "The " . $config->localWikiName . " API did not return a success result!\n" );
       }
-      if ( isset( $localRet['mirrormove']['timestamp'] ) ) {
-            $pushTimestamp = $localRet['mirrormove']['timestamp'];
-      }
-      if ( isset( $localRet['mirrordelete']['timestamp'] ) ) {
-            $pushTimestamp = $localRet['mirrordelete']['timestamp'];
+      if ( !$pushTimestamp ) {
+            die( "The " . $config->localWikiName . " API did not return a push timestamp!\n" );
       }
       $pushStatusQuery = "UPDATE mb_queue SET mbq_status='pushed', mbq_push_timestamp='"
             . $pushTimestamp
@@ -273,9 +290,39 @@ function getMirrorLogEntryPushMapping( $row ) {
             'rcid' => 'mbq_rc_id',
             'rcbot' => 'mbq_rc_bot',
             'rcpatrolled' => 'mbq_rc_patrolled',
-            'rctype' => 3,
+            'rctype' => 'mbq_rc_type',
             'rcsource' => 'mbq_rc_source',
             'rcip' => 'mbq_rc_ip',
+            'comment2' => 'mbq_comment2', // Comment to use in the null revision
+            'nullrevid' => 'mbq_rev_id',
+            'nullrevparentid' => 'mbq_rc_last_oldid',
+      );
+      return $pushMapping;
+}
+
+function getMirrorMergePushMapping( $row ) {
+      $pushMapping = array(
+	    'logid' => 'mbq_log_id',
+	    'logtype' => 'mbq_log_type',
+	    'logaction' => 'mbq_log_action',
+	    'logtimestamp' => 'mbq_timestamp',
+	    'loguser' => 'mbq_user', // This will actually be left as zero
+	    'lognamespace' => 'mbq_namespace',
+	    'logusertext' => 'mbq_user_text',
+	    'logtitle' => 'mbq_title',
+	    'logcomment' => 'mbq_comment',
+	    'logparams' => 'mbq_log_params',
+	    'logpage' => 'mbq_page_id',
+            'logdeleted' => 'mbq_deleted',
+            'tstags' => 'mbq_tags',
+            'rcid' => 'mbq_rc_id',
+            'rcbot' => 'mbq_rc_bot',
+            'rcpatrolled' => 'mbq_rc_patrolled',
+            'rctype' => 'mbq_rc_type',
+            'rcsource' => 'mbq_rc_source',
+            'rcip' => 'mbq_rc_ip',
+            'redirectrevid' => 'mbq_rev_id2',
+            'comment2' => 'mbq_comment2'
       );
       return $pushMapping;
 }

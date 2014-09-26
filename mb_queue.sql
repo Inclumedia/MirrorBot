@@ -2,8 +2,10 @@ CREATE TABLE mb_queue(
 -- Primary key
 mbq_id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
 
--- mb_text.mbt_id of the row containing the revision text
+-- mb_text.mbt_id of the row containing the revision text, or null revision text
 mbq_text_id INT UNSIGNED NOT NULL DEFAULT 0,
+-- mb_text.mbt_id of the row containing the redirect revision text
+mbq_text_id2 INT UNSIGNED NOT NULL DEFAULT 0,
 
 -- action to take
 mbq_action VARCHAR(255) BINARY NOT NULL DEFAULT '',
@@ -11,6 +13,8 @@ mbq_action VARCHAR(255) BINARY NOT NULL DEFAULT '',
 mbq_push_timestamp varbinary(14) NOT NULL DEFAULT '',
 -- status
 mbq_status VARCHAR(255) BINARY NOT NULL DEFAULT '',
+-- second set of params
+mbq_params2 blob NULL,
 
 -- log_comment, rc_comment, rev_comment; comment (from api rc)
 mbq_comment VARCHAR(255) BINARY NOT NULL DEFAULT '',
@@ -55,8 +59,6 @@ mbq_rc_anon tinyint UNSIGNED NOT NULL DEFAULT 0,
 mbq_rc_bot tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- id
 mbq_rc_id INT UNSIGNED NOT NULL DEFAULT 0,
--- id2
-mbq_rc_id2 INT UNSIGNED NOT NULL DEFAULT 0,
 -- ip
 mbq_rc_ip varbinary(40) NOT NULL default '',
 -- revoldid
@@ -79,8 +81,6 @@ mbq_rev_content_format varbinary(64) DEFAULT NULL,
 -- rev_sha1; sha1 (from api rev)
 mbq_rev_sha1 varbinary(32) NOT NULL DEFAULT '',
 
--- page_is_redirect (from api rc) (not used)
-mbq_page_is_redirect tinyint UNSIGNED NOT NULL DEFAULT 0,
 -- tags (from api rc); not used for anything
 mbq_tags VARCHAR(255) BINARY NOT NULL DEFAULT ''
 );
