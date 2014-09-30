@@ -52,25 +52,22 @@ class botOperations {
             while ( $this->options['r'] != 'o' || !$this->passes ) {
                   $this->passes++;
                   if ( $this->options['q'] == 'rcrev' ) {
-                        switch ( $optionThisTime ) {
-                              case 'rc':
-                                    $optionThisTime = 'rev';
-                                    break;
-                              case 'rev':
-                                    $optionThisTime = 'nullrev';
-                                    break;
-                              case 'nullrev':
-                                    $optionThisTime = 'redirectrev';
-                                    break;
-                              case 'redirectrev':
-                                    $optionThisTime = 'revids';
-                                    break;
-                              case 'revids':
-                                    $optionThisTime = 'imageinfo';
-                                    break;
-                              case 'imageinfo':
-                                    $optionThisTime = 'rc';
-                                    break;
+                        $result = $db->select( "SELECT * FROM mb_queue "
+                              . "ORDER BY 'mbq_id ASC' LIMIT 1" );
+                        $nextRow = $result->fetch_assoc();
+                        // If there's something blocking the pushbot, do that now
+                        if ( isset( $mirrorFunctions[$nextRow['mbq_status']] ) ) {
+                              $optionThisTime =
+                                    $this->config->mirrorFunctions[$nextRow['mbq_status']];
+                        // Otherwise, stay in the rotation
+                        } else {
+                              $flipped = array_flip( $this->config->optionRotation );
+                              if ( $flipped[$optionThisTime] === count( $flipped ) ) {
+                                    $optionThisTime = $this->config->optionRotation[0];
+                              } else {
+                                    $optionThisTime = $this->config->optionRotation
+                                          [$flipped[$optionThisTime] + 1];
+                              }
                         }
                   }
                   switch ( $optionThisTime ) {
@@ -91,6 +88,9 @@ class botOperations {
                               break;
                         case 'imageinfo':
                               $this->imageinfo();
+                              break;
+                        case 'imagedownload':
+                              $this->imagedownload();
                               break;
                   }
                   if ( $this->options['r'] != 'o' ) {
@@ -180,7 +180,7 @@ class botOperations {
                   // Get rid of dashes, colons, Ts and Zs in timestamp
                   foreach ( $this->config->timestampFields as $timestampField ) {
                         if ( isset( $thisLogevent[$timestampField] ) ) {
-                        $thisLogevent[$timestampField] = mirrorGlobalFunctions::killUndesirables(
+                        $thisLogevent[$timestampField] = MirrorGlobalFunctions::killUndesirables(
                               $thisLogevent[$timestampField] );
                         }
                   }
@@ -326,9 +326,9 @@ class botOperations {
                   }
             } else {
                   // Note this failure in the failure log file
-                  mirrorGlobalFunctions::logFailure( $this->config, "Failure inserting data\n" );
-                  mirrorGlobalFunctions::logFailure( $this->config, $row );
-                  mirrorGlobalFunctions::logFailure( $this->config, $this->db->error_list );
+                  MirrorGlobalFunctions::logFailure( $this->config, "Failure inserting data\n" );
+                  MirrorGlobalFunctions::logFailure( $this->config, $row );
+                  MirrorGlobalFunctions::logFailure( $this->config, $this->db->error_list );
                   die();
             }
       }
@@ -336,9 +336,9 @@ class botOperations {
       function rev() {
             $table = 'mb_queue';
             $where = "mbq_status='needsrev'";
-            $options = "ORDER BY mbq_action DESC, mbq_timestamp ASC, mbq_rc_id ASC";
+            $options = "ORDER BY mbq_id ASC";
             $ret = $this->db->query( "SELECT * FROM mb_queue "
-                  ."WHERE $where LIMIT ". $this->config->revLimit );
+                  . "WHERE $where $options LIMIT ". $this->config->revLimit );
             if ( !$ret || !$ret->num_rows ) {
                   echo ( "No $where items\n" );
                   return;
@@ -375,7 +375,7 @@ class botOperations {
                               . "mbq_status='needsundeletion'"
                               . " WHERE mbq_rev_id="
                               . $badRevId . " AND mbq_status='needsrevid'";
-                        mirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                        MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
                               "marking bad revision ID $badRevId as needsundeletion" );
                   }
             }
@@ -441,7 +441,7 @@ class botOperations {
                         // TODO: Begin transaction and commit transaction
                         $query = "INSERT INTO mb_text (mbt_text) VALUES ("
                               . $content . ")";
-                        $status = mirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                        $status = MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
                               "inserting text for rev id " . $revision['revid'] );
                         $textId = $this->db->insert_id;
                         // Now update the queue
@@ -449,7 +449,7 @@ class botOperations {
                               . ",mbq_status='readytopush'"
                               . " WHERE mbq_rev_id="
                               . $revision['revid'] . " AND mbq_status='needsrev'";
-                        mirrorGlobalFunctions::doQuery ( $this->db, $this->config, $row,
+                        MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $row,
                               'updating rev ' . $revision['revid']
                               . " with text id $textId" );
                   }
@@ -481,7 +481,7 @@ class botOperations {
             if ( $continueValueArr ) {
                   $needsRevIdsWhere .= " AND mbq_rc_id=" . $continueValueArr['mbc_misc'];
             } else {
-                  $needsRevIdsQueryOptions = "ORDER BY mbq_rc_id";
+                  $needsRevIdsQueryOptions = "ORDER BY mbq_id ASC";
             }
             $needsRevIdsQueryOptions .= " LIMIT 1";
             $dbQuery = "SELECT * FROM mb_queue WHERE $needsRevIdsWhere "
@@ -517,7 +517,7 @@ class botOperations {
                         $query = "UPDATE mb_queue SET "
                               . "mbq_status='readytopush',mbq_action='mirrorlogentry' "
                               . "WHERE $needsRevIdsWhere ";
-                        mirrorGlobalFunctions::doQuery( $this->db,
+                        MirrorGlobalFunctions::doQuery( $this->db,
                               $this->config, $query,
                               'changing mirrorpagerestore needsrevids to '
                               . 'mirrorlogentry readytopush' );
@@ -595,7 +595,7 @@ class botOperations {
                         $row .= ')';
                   }
                   $row .= ';';
-                  $queryResult = mirrorGlobalFunctions::doQuery( $this->db, $this->config,
+                  $queryResult = MirrorGlobalFunctions::doQuery( $this->db, $this->config,
                         $row, 'inserting ' . count( $events ) . ' changes' );
                   if ( $queryResult ) {
                         // Check cursor existence. If it exists, update it. If it doesn't, then
@@ -618,7 +618,7 @@ class botOperations {
                               $verb = 'inserting';
                         }
                         if ( $query ) {
-                              mirrorGlobalFunctions::doQuery( $this->db, $this->config,
+                              MirrorGlobalFunctions::doQuery( $this->db, $this->config,
                                     $query, $verb . ' pagerestorerevids cursor' );
                         }
                         // If we've reached the end of the pull, then update the
@@ -627,7 +627,7 @@ class botOperations {
                               $query = "UPDATE mb_queue SET "
                                     . "mbq_status='needsmakeremotelylive' "
                                     . "WHERE $needsRevIdsWhere ";
-                              mirrorGlobalFunctions::doQuery( $this->db,
+                              MirrorGlobalFunctions::doQuery( $this->db,
                                     $this->config, $query,
                                     'changing mirrorpagerestore needsrevids to '
                                     . 'needsmakeremotelylive' );
@@ -636,16 +636,19 @@ class botOperations {
             }
       }
 
-      // Get the null revision ID and comment2
+      // Get the null revision ID and comment2. This is used for log entries. For uploads, it's
+      // not necessarily a null revision, but we're not given the revision ID, so we have to use
+      // this.
       function nullrev() {
             $table = 'mb_queue';
             $where = "(mbq_status='needsmovenullrev' or mbq_status='needsprotectnullrev' "
                   . "or mbq_status='needsuploadnullrev')";
+            $options = "ORDER BY mbq_id ASC";
             $keepLooping = true;
             $firstLoop = true;
             while ( $keepLooping ) {
                   $ret = $this->db->query( "SELECT * FROM mb_queue "
-                        ."WHERE $where LIMIT 1" );
+                        ."WHERE $where $options LIMIT 1" );
                   if ( !$ret || !$ret->num_rows ) {
                         if ( $firstLoop ) {
                               echo ( "No $where items for nullrev\n" );
@@ -664,7 +667,7 @@ class botOperations {
                               $status = 'needsmoveredirectrev';
                         }
                   }
-                  $timestamp = mirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
+                  $timestamp = MirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
                   $pageId = $value['mbq_page_id'];
                   $query = "?action=query&prop=revisions&rvprop=comment|ids|content"
                         . "&pageids=$pageId&rvstart=$timestamp&rvlimit=1&format=php";
@@ -696,7 +699,7 @@ class botOperations {
                                                       // Insert the content, and get the ID for that row
                                                       $query = "INSERT INTO mb_text (mbt_text) VALUES ("
                                                             . $content . ")";
-                                                      mirrorGlobalFunctions::doQuery ( $this->db,
+                                                      MirrorGlobalFunctions::doQuery ( $this->db,
                                                             $this->config, $query,
                                                             "inserting text for null rev id "
                                                             . $thisRevId );
@@ -711,7 +714,7 @@ class botOperations {
                                                             . "',mbq_text_id=$textId"
                                                             . ",mbq_status='$status"
                                                             . "' WHERE mbq_id=" . $value['mbq_id'];
-                                                      mirrorGlobalFunctions::doQuery( $this->db,
+                                                      MirrorGlobalFunctions::doQuery( $this->db,
                                                             $this->config, $query, "updating rev id $thisRevId "
                                                             ."with comment" );
                                                 }
@@ -726,7 +729,7 @@ class botOperations {
                               echo "Bad revision for comment!\n";
                               $query = "UPDATE mb_queue SET mbq_status='$status'"
                                     . "' WHERE mbq_id=" . $value['mbq_id'];
-                              mirrorGlobalFunctions::doQuery( $this->db,
+                              MirrorGlobalFunctions::doQuery( $this->db,
                                     $this->config, $query, "changing status to $status" );
                         }
                   }
@@ -737,11 +740,12 @@ class botOperations {
       function redirectrev() {
             $table = 'mb_queue';
             $where = "(mbq_status='needsmoveredirectrev' OR mbq_status='needsmergeredirectrev')";
+            $options = 'ORDER BY mbq_id ASC';
             $keepLooping = true;
             $firstLoop = true;
             while ( $keepLooping ) {
                   $ret = $this->db->query( "SELECT * FROM mb_queue "
-                        ."WHERE $where LIMIT 1" );
+                        ."WHERE $where $options LIMIT 1" );
                   if ( !$ret || !$ret->num_rows ) {
                         if ( $firstLoop ) {
                               echo ( "No $where items for redirectrev\n" );
@@ -761,7 +765,7 @@ class botOperations {
                   } else {
                         $queryCond = 'pageids=' . $value['mbq_page_id'];
                   }
-                  $timestamp = mirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
+                  $timestamp = MirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
                   // If there's no redirect revision ID in the mb_queue row yet...
                   if ( !$value['mbq_rev_id2'] ) {
                         // Is there a redirect? If not, break, because there's nothing for us to
@@ -771,7 +775,7 @@ class botOperations {
                               $query = 'UPDATE mb_queue SET '
                                     . "mbq_status='readytopush' "
                                     . "WHERE mbq_id=" . $value['mbq_id'];
-                              mirrorGlobalFunctions::doQuery( $this->db,
+                              MirrorGlobalFunctions::doQuery( $this->db,
                                     $this->config, $query, "changing status to readytopush" );
                               continue;
                         }
@@ -791,7 +795,7 @@ class botOperations {
                               $query = 'UPDATE mb_queue SET '
                                     . "mbq_status='readytopush' "
                                     . "WHERE mbq_id=" . $value['mbq_id'];
-                              mirrorGlobalFunctions::doQuery( $this->db,
+                              MirrorGlobalFunctions::doQuery( $this->db,
                                     $this->config, $query,
                                     "marking as readytopush bad revision ID for page "
                                     . $queryCond );
@@ -806,7 +810,7 @@ class botOperations {
                                           $query = 'UPDATE mb_queue SET '
                                                 . "mbq_status='readytopush' "
                                                 . "WHERE mbq_id=" . $value['mbq_id'];
-                                          mirrorGlobalFunctions::doQuery( $this->db,
+                                          MirrorGlobalFunctions::doQuery( $this->db,
                                                 $this->config, $query,
                                                 "marking as readytopush bad revision ID for page "
                                                 . $prefixedMoveFrom );
@@ -816,13 +820,13 @@ class botOperations {
                                           foreach( $revisions as $revision ) {
                                                 // See if this revision is a redirect; if not,
                                                 // treat it like a bad revision.
-                                                if( mirrorGlobalFunctions::isRedirect(
+                                                if( MirrorGlobalFunctions::isRedirect(
                                                       $this->config, $revision['*'] ) === false ) {
                                                       echo "Can't find redirect revision!\n";
                                                       $query = 'UPDATE mb_queue SET '
                                                             . "mbq_status='readytopush' "
                                                             . "WHERE mbq_id=" . $value['mbq_id'];
-                                                      mirrorGlobalFunctions::doQuery( $this->db,
+                                                      MirrorGlobalFunctions::doQuery( $this->db,
                                                             $this->config, $query,
                                                             "marking as readytopush page "
                                                             . $queryCond );
@@ -835,7 +839,7 @@ class botOperations {
                                                 // Insert the content, and get the ID for that row
                                                 $query = "INSERT INTO mb_text (mbt_text) VALUES ("
                                                       . $content . ")";
-                                                mirrorGlobalFunctions::doQuery ( $this->db,
+                                                MirrorGlobalFunctions::doQuery ( $this->db,
                                                       $this->config, $query,
                                                       "inserting text for redirect rev id "
                                                       . $thisRedirectRevId );
@@ -855,7 +859,7 @@ class botOperations {
                                                 $updateMsg = $value['mbq_action'] === 'mirrormove' ?
                                                       "updating rev id " . $value['mbq_rev_id'] :
                                                       "updating mbq id " . $value['mbq_id'];
-                                                mirrorGlobalFunctions::doQuery( $this->db,
+                                                MirrorGlobalFunctions::doQuery( $this->db,
                                                       $this->config, $query, $updateMsg
                                                       . " with redirect rev id $thisRedirectRevId" );
                                           }
@@ -904,20 +908,20 @@ class botOperations {
                         $query = 'UPDATE mb_queue SET '
                               . "mbq_status='needsundeletion'"
                               . " WHERE mbq_id={$value['mbq_id']}";
-                        mirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                        MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
                               "marking mbq_id {$value['mbq_id']} as needsundeletion "
                               . "(missing file)" );
                         return;
                   }
                   $revisions = $page['imageinfo'];
                   foreach( $revisions as $revision ) { // Get the particular imageinfo...
-                        if ( intval( mirrorGlobalFunctions::killUndesirables(
+                        if ( intval( MirrorGlobalFunctions::killUndesirables(
                               $revision['timestamp'] ) ) !== $imgTimestamp ) {
                               // TODO: Should this be needsimageundeletion?
                               $query = 'UPDATE mb_queue SET '
                                     . "mbq_status='needsundeletion'"
                                     . " WHERE mbq_id={$value['mbq_id']}";
-                              mirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                              MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
                                     "marking mbq_id {$value['mbq_id']} as needsundeletion "
                                     . "(timestamps don't match)");
                               return;
@@ -930,12 +934,78 @@ class botOperations {
                         $query = 'UPDATE mb_queue SET '
                               . "mbq_params2='" . $this->db->real_escape_string(
                                     serialize( $params2 ) )
-                              . "', mbq_status='needsimageupload'"
+                              . "', mbq_status='needsimagedownload'"
                               . " WHERE mbq_id={$value['mbq_id']}";
-                        mirrorGlobalFunctions::doQuery ( $this->db, $this->config,
+                        MirrorGlobalFunctions::doQuery ( $this->db, $this->config,
                               $query, "inserting imageinfo for mbq_id " . $value['mbq_id'] );
                   }
             }
+      }
+
+      function imageDownload() {
+            $table = 'mb_queue';
+            $where = "mbq_status='needsimagedownload'";
+            $options = "ORDER BY mbq_id ASC";
+            $ret = $this->db->query( "SELECT * FROM mb_queue "
+                  . "WHERE $where LIMIT 1" );
+            if ( !$ret || !$ret->num_rows ) {
+                  echo ( "No $where items\n" );
+                  return;
+            }
+            $value = $ret->fetch_assoc();
+            $params2 = unserialize( $value['mbq_params2'] );
+            if ( !isset( $params2['url'] ) ) {
+                  die( "URL parameter wasn't set in mbq_id {$value['mbq_id']}\n" );
+            }
+            $file = fopen ( $params2['url'], "rb" );
+            // Die if we can't open the remote wiki image file
+            // TODO: Mark it as needsundelete or needsfile instead
+            if ( !$file ) {
+                  die( "Couldn't open file {$params2['url']}" );
+            }
+            // Does the remote wiki image URL start with the expected path?
+            if ( strpos( $params2['url'], $this->config->stripFromFront[$this->wikiName] )
+                  !== 0 ) {
+                  die( "Path {$params2['url']} did not start with "
+                        . $this->config->stripFromFront[$this->wikiName] . "\n" );
+            }
+            // Strip part of the path from the filename
+            $stripped = substr( $params2['url'],
+                  strlen( $this->config->stripFromFront[$this->wikiName] ),
+                  strlen( $params2['url'] )
+                  - strlen( $this->config->stripFromFront[$this->wikiName] ) );
+            // We just want the intermediate stuff, i.e. the image subfolders
+            $strippedOfFilenameToo = substr( $stripped, 0,
+                  strlen( $stripped ) - strlen( $value['mbq_title'] ) );
+            // Add our local path to the filename
+            $createFilename = $this->config->addToFront[$this->wikiName] . $stripped;
+            // Create directory
+            $dirname = $this->config->addToFront[$this->wikiName] . $strippedOfFilenameToo;
+            if ( !file_exists( $dirname ) ) {
+                  $newdir = mkdir( $dirname, 0755, true );
+                  if ( !$newdir ) {
+                        die( "Failure creating directory $dirname" );
+                  }
+            }
+            // Create file
+            $newf = fopen ( $createFilename, "wb" );
+            if ( !$newf ) {
+                  die( "Failure creating file $createFilename\n" );
+            }
+            while( !feof($file ) ) {
+                  fwrite( $newf, fread( $file, 1024 * 8 ), 1024 * 8 );
+            }
+            if ($file) {
+                  fclose( $file );
+            }
+            if ($newf) {
+                  fclose($newf);
+            }
+            $query = 'UPDATE mb_queue SET '
+                  . "mbq_status='readytopush'"
+                  . " WHERE mbq_id={$value['mbq_id']}";
+            MirrorGlobalFunctions::doQuery ( $this->db, $this->config,
+                  $query, "downloading file $createFilename for mbq_id " . $value['mbq_id'] );
       }
 
       function initialize() {

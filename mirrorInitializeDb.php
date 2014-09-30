@@ -72,7 +72,7 @@ foreach ( $config->tables as $table => $sqlFile ) {
       }
 }
 
-class mirrorGlobalFunctions {
+class MirrorGlobalFunctions {
       public static function logFailure ( $config, $contents ) {
             // Prepare failure log file;
             $failures = fopen ( $config->failureLogFile, 'a' );

@@ -7,10 +7,20 @@ class config {
     );
     public $remoteWikiUrl = array(
         'test117' => "http://localhost/test117/w/api.php",
-        'enwiki' => "http://en.wikipedia.org/w/api.php"
+        'enwiki' => "https://en.wikipedia.org/w/api.php"
+    );
+    public $killFilesCmd = 'sudo rm -rf /var/www/html/test117/w/images/*';
+    // Remote image path
+    public $stripFromFront = array(
+        'test117' => 'http://localhost/test117/w/images/'
+    );
+    // Local bot image file path
+    public $addToFront = array(
+        'test117' => '/home/nathan/MirrorBot/images/test117/'
     );
     // a strpos() will use this to determine if the contents have a redirect; kind of an
-    // inadequate hack
+    // inadequate hack because we're having to hardcode it here for each language. strtolower()
+    // is in use.
     public $remoteWikiRedirectString = array(
         'test117' => "#redirect"
     );
@@ -219,6 +229,16 @@ class config {
             'sha1' => "''"
         )
     );
+    // Statuses and their functions; used by mirrorPullBot
+    public $mirrorFunctions = array(
+        'needsmovenullrev' => 'nullrev',
+        'needsprotectnullrev' => 'nullrev',
+        'needsuploadnullrev' => 'nullrev',
+        'needspagerestorerevids' => 'revids',
+        'needsimportrevids' => 'revids',
+        'needsmergeredirectrev' => 'redirectrev',
+        'needsmoveredirectrev' => 'redirectrev'
+    );
     // Log actions and their mirrortools counterparts; used by mirrorPullBot
     public $mirrorTypeActions = array(
         'move' => array(
@@ -425,6 +445,15 @@ class config {
             'bitdepth',
             'metadata'
         )
+    );
+    public $optionRotation = array(
+        'rc',
+        'rev',
+        'nullrev',
+        'redirectrev',
+        'revids',
+        'imageinfo',
+        'imagedownload',
     );
     function __construct() {
         $this->passwordPath = $this->mirrorBotPath . "passwords/";

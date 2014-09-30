@@ -205,23 +205,26 @@ while ( $keepGoing ) {
       $row['mbq_user'] = 0;
       switch ( $action ) {
             case 'mirrorlogentry':
-                  $pushMapping = getMirrorLogEntryPushMapping( $row );
+                  $mappings = getMirrorLogEntryPushMapping( $row );
                   break;
             case 'mirrormove':
-                  $pushMapping = getMirrorMovePushMapping( $row );
+                  $mappings = getMirrorMovePushMapping( $row );
                   break;
             case 'mirrordelete':
-                  $pushMapping = getMirrorDeletePushMapping( $row );
+                  $mappings = getMirrorDeletePushMapping( $row );
                   break;
             case 'mirrormerge':
-                  $pushMapping = getMirrorMergePushMapping( $row );
+                  $mappings = getMirrorMergePushMapping( $row );
                   break;
             case 'mirrorprotect':
-                  $pushMapping = getMirrorLogEntryPushMapping( $row );
+                  $mappings = getMirrorLogEntryPushMapping( $row );
                   $action = 'mirrorlogentry';
                   break;
             case 'mirroredit':
-                  $pushMapping = getMirrorEditPushMapping( $row );
+                  $mappings = getMirrorEditPushMapping( $row );
+                  break;
+            case 'mirrorupload':
+                  $mappings = getMirrorUploadPushMapping( $row );
                   break;
             default:
                   // Development code that will cause problems in production
@@ -233,8 +236,20 @@ while ( $keepGoing ) {
       if ( $continueThis ) {
             continue;
       }
+      $metadata = '';
+      // Unserialize the params2
+      if ( isset( $mappings['params2Mapping'] ) ) {
+            $unserializedParams2 = unserialize( $row['mbq_params2'] );
+            // Reserialize the metadata
+            if ( isset( $unserializedParams2['metadata'] ) ) {
+                  $row['metadata'] = serialize( $unserializedParams2['metadata'] );
+            }
+      }
+      foreach( $mappings['params2Mapping'] as $params2MappingKey => $params2MappingValue ) {
+            $data[$params2MappingKey] = $unserializedParams2[$params2MappingValue];
+      }
       $query = "?action=$action&format=php&token=$token";
-      foreach( $pushMapping as $pushMappingKey => $pushMappingValue ) {
+      foreach( $mappings['pushMapping'] as $pushMappingKey => $pushMappingValue ) {
             $data[$pushMappingKey] = $row[$pushMappingValue];
       }
       $localRet = $wiki->query ( $query, $data ); // POST
@@ -273,131 +288,180 @@ while ( $keepGoing ) {
 }
             
 function getMirrorLogEntryPushMapping( $row ) {
-      $pushMapping = array(
-	    'logid' => 'mbq_log_id',
-	    'logtype' => 'mbq_log_type',
-	    'logaction' => 'mbq_log_action',
-	    'logtimestamp' => 'mbq_timestamp',
-	    'loguser' => 'mbq_user', // This will actually be left as zero
-	    'lognamespace' => 'mbq_namespace',
-	    'logusertext' => 'mbq_user_text',
-	    'logtitle' => 'mbq_title',
-	    'logcomment' => 'mbq_comment',
-	    'logparams' => 'mbq_log_params',
-	    'logpage' => 'mbq_page_id',
-            'logdeleted' => 'mbq_deleted',
-            'tstags' => 'mbq_tags',
-            'rcid' => 'mbq_rc_id',
-            'rcbot' => 'mbq_rc_bot',
-            'rcpatrolled' => 'mbq_rc_patrolled',
-            'rctype' => 'mbq_rc_type',
-            'rcsource' => 'mbq_rc_source',
-            'rcip' => 'mbq_rc_ip',
-            'comment2' => 'mbq_comment2', // Comment to use in the null revision
-            'nullrevid' => 'mbq_rev_id',
-            'nullrevparentid' => 'mbq_rc_last_oldid',
+      $mappings = array(
+            'pushMapping' => array(
+                  'logid' => 'mbq_log_id',
+                  'logtype' => 'mbq_log_type',
+                  'logaction' => 'mbq_log_action',
+                  'logtimestamp' => 'mbq_timestamp',
+                  'loguser' => 'mbq_user', // This will actually be left as zero
+                  'lognamespace' => 'mbq_namespace',
+                  'logusertext' => 'mbq_user_text',
+                  'logtitle' => 'mbq_title',
+                  'logcomment' => 'mbq_comment',
+                  'logparams' => 'mbq_log_params',
+                  'logpage' => 'mbq_page_id',
+                  'logdeleted' => 'mbq_deleted',
+                  'tstags' => 'mbq_tags',
+                  'rcid' => 'mbq_rc_id',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcpatrolled' => 'mbq_rc_patrolled',
+                  'rctype' => 'mbq_rc_type',
+                  'rcsource' => 'mbq_rc_source',
+                  'rcip' => 'mbq_rc_ip',
+                  'comment2' => 'mbq_comment2', // Comment to use in the null revision
+                  'nullrevid' => 'mbq_rev_id',
+                  'nullrevparentid' => 'mbq_rc_last_oldid'
+            )
       );
-      return $pushMapping;
+      return $mappings;
 }
 
 function getMirrorMergePushMapping( $row ) {
-      $pushMapping = array(
-	    'logid' => 'mbq_log_id',
-	    'logtype' => 'mbq_log_type',
-	    'logaction' => 'mbq_log_action',
-	    'logtimestamp' => 'mbq_timestamp',
-	    'loguser' => 'mbq_user', // This will actually be left as zero
-	    'lognamespace' => 'mbq_namespace',
-	    'logusertext' => 'mbq_user_text',
-	    'logtitle' => 'mbq_title',
-	    'logcomment' => 'mbq_comment',
-	    'logparams' => 'mbq_log_params',
-	    'logpage' => 'mbq_page_id',
-            'logdeleted' => 'mbq_deleted',
-            'tstags' => 'mbq_tags',
-            'rcid' => 'mbq_rc_id',
-            'rcbot' => 'mbq_rc_bot',
-            'rcpatrolled' => 'mbq_rc_patrolled',
-            'rctype' => 'mbq_rc_type',
-            'rcsource' => 'mbq_rc_source',
-            'rcip' => 'mbq_rc_ip',
-            'redirectrevid' => 'mbq_rev_id2',
-            'comment2' => 'mbq_comment2'
+      $mappings = array(
+            'pushMapping' => array(
+                  'logid' => 'mbq_log_id',
+                  'logtype' => 'mbq_log_type',
+                  'logaction' => 'mbq_log_action',
+                  'logtimestamp' => 'mbq_timestamp',
+                  'loguser' => 'mbq_user', // This will actually be left as zero
+                  'lognamespace' => 'mbq_namespace',
+                  'logusertext' => 'mbq_user_text',
+                  'logtitle' => 'mbq_title',
+                  'logcomment' => 'mbq_comment',
+                  'logparams' => 'mbq_log_params',
+                  'logpage' => 'mbq_page_id',
+                  'logdeleted' => 'mbq_deleted',
+                  'tstags' => 'mbq_tags',
+                  'rcid' => 'mbq_rc_id',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcpatrolled' => 'mbq_rc_patrolled',
+                  'rctype' => 'mbq_rc_type',
+                  'rcsource' => 'mbq_rc_source',
+                  'rcip' => 'mbq_rc_ip',
+                  'redirectrevid' => 'mbq_rev_id2',
+                  'comment2' => 'mbq_comment2'
+            )
       );
-      return $pushMapping;
+      return $mappings;
 }
 
 function getMirrorMovePushMapping ( $row ) {
-      $pushMapping = array(
-	    'logid' => 'mbq_log_id',
-            'logaction' => 'mbq_log_action',
-	    'logtimestamp' => 'mbq_timestamp',
-	    'loguser' => 'mbq_user', // This will actually be left as zero
-            'logusertext' => 'mbq_user_text',
-	    'lognamespace' => 'mbq_namespace',
-	    'logtitle' => 'mbq_title',
-	    'logcomment' => 'mbq_comment',
-	    'logparams' => 'mbq_log_params',
-	    'logpage' => 'mbq_page_id',
-            'logdeleted' => 'mbq_deleted',
-            'tstags' => 'mbq_tags',
-            'rcid' => 'mbq_rc_id',
-            'rcbot' => 'mbq_rc_bot',
-            'rcpatrolled' => 'mbq_rc_patrolled',
-            'comment2' => 'mbq_comment2', // Comment to use in the redirect and null revision
-            'nullrevid' => 'mbq_rev_id',
-            'nullrevparentid' => 'mbq_rc_last_oldid',
-            'redirectrevid' => 'mbq_rev_id2',
-            'redirectpageid' => 'mbq_page_id2'
+      $mappings = array(
+            'pushMapping' => array(
+                  'logid' => 'mbq_log_id',
+                  'logaction' => 'mbq_log_action',
+                  'logtimestamp' => 'mbq_timestamp',
+                  'loguser' => 'mbq_user', // This will actually be left as zero
+                  'logusertext' => 'mbq_user_text',
+                  'lognamespace' => 'mbq_namespace',
+                  'logtitle' => 'mbq_title',
+                  'logcomment' => 'mbq_comment',
+                  'logparams' => 'mbq_log_params',
+                  'logpage' => 'mbq_page_id',
+                  'logdeleted' => 'mbq_deleted',
+                  'tstags' => 'mbq_tags',
+                  'rcid' => 'mbq_rc_id',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcpatrolled' => 'mbq_rc_patrolled',
+                  'comment2' => 'mbq_comment2', // Comment to use in the redirect and null revision
+                  'nullrevid' => 'mbq_rev_id',
+                  'nullrevparentid' => 'mbq_rc_last_oldid',
+                  'redirectrevid' => 'mbq_rev_id2',
+                  'redirectpageid' => 'mbq_page_id2'
+            )
       );
-      return $pushMapping;
+      return $mappings;
 }
 
 function getMirrorDeletePushMapping ( $row ) {
-      $pushMapping = array(
-	    'logid' => 'mbq_log_id',
-	    'logtimestamp' => 'mbq_timestamp',
-	    'loguser' => 'mbq_user', // This will actually be left as zero
-            'logusertext' => 'mbq_user_text',
-	    'lognamespace' => 'mbq_namespace',
-	    'logtitle' => 'mbq_title',
-	    'logcomment' => 'mbq_comment',
-	    'logparams' => 'mbq_log_params',
-	    'logpage' => 'mbq_page_id',
-            'logdeleted' => 'mbq_deleted',
-            'tstags' => 'mbq_tags',
-            'rcid' => 'mbq_rc_id',
-            'rcbot' => 'mbq_rc_bot',
-            'rcpatrolled' => 'mbq_rc_patrolled',
+      $mappings = array(
+            'pushMapping' => array(
+                  'logid' => 'mbq_log_id',
+                  'logtimestamp' => 'mbq_timestamp',
+                  'loguser' => 'mbq_user', // This will actually be left as zero
+                  'logusertext' => 'mbq_user_text',
+                  'lognamespace' => 'mbq_namespace',
+                  'logtitle' => 'mbq_title',
+                  'logcomment' => 'mbq_comment',
+                  'logparams' => 'mbq_log_params',
+                  'logpage' => 'mbq_page_id',
+                  'logdeleted' => 'mbq_deleted',
+                  'tstags' => 'mbq_tags',
+                  'rcid' => 'mbq_rc_id',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcpatrolled' => 'mbq_rc_patrolled'
+            )
       );
-      return $pushMapping;
+      return $mappings;
 }
 
 function getMirrorEditPushMapping ( $row ) {
-      $pushMapping = array(
-            'revid' => 'mbq_rev_id',
-            'revpage' => 'mbq_page_id',
-            'revcomment' => 'mbq_comment',
-            'revuser' => 'mbq_user',
-            'revusertext' => 'mbq_user_text',
-            'revtimestamp' => 'mbq_timestamp',
-            'revminoredit' => 'mbq_minor',
-            'revlen' => 'mbq_len',
-            'revsha1' => 'mbq_rev_sha1',
-            'revcontentmodel' => 'mbq_rev_content_model',
-            'revcontentformat' => 'mbq_rev_content_format',
-            'revdeleted' => 'mbq_deleted',
-            'rcid' => 'mbq_rc_id',
-            'rcnamespace' => 'mbq_namespace',
-            'rctitle' => 'mbq_title',
-            'rcbot' => 'mbq_rc_bot',
-            'rcnew' => 'mbq_rc_new',
-            'rcoldlen' => 'mbq_rc_old_len',
-            'rclastoldid' => 'mbq_rc_last_oldid',
-            'rctype' => 'mbq_rc_type',
-            'rcsource' => 'mbq_rc_source',
-            'rcpatrolled' => 'mbq_rc_patrolled',
-            'tstags' => 'mbq_tags',
+      $mappings = array(
+            'pushMapping' => array(
+                  'revid' => 'mbq_rev_id',
+                  'revpage' => 'mbq_page_id',
+                  'revcomment' => 'mbq_comment',
+                  'revuser' => 'mbq_user',
+                  'revusertext' => 'mbq_user_text',
+                  'revtimestamp' => 'mbq_timestamp',
+                  'revminoredit' => 'mbq_minor',
+                  'revlen' => 'mbq_len',
+                  'revsha1' => 'mbq_rev_sha1',
+                  'revcontentmodel' => 'mbq_rev_content_model',
+                  'revcontentformat' => 'mbq_rev_content_format',
+                  'revdeleted' => 'mbq_deleted',
+                  'rcid' => 'mbq_rc_id',
+                  'rcnamespace' => 'mbq_namespace',
+                  'rctitle' => 'mbq_title',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcnew' => 'mbq_rc_new',
+                  'rcoldlen' => 'mbq_rc_old_len',
+                  'rclastoldid' => 'mbq_rc_last_oldid',
+                  'rctype' => 'mbq_rc_type',
+                  'rcsource' => 'mbq_rc_source',
+                  'rcpatrolled' => 'mbq_rc_patrolled',
+                  'tstags' => 'mbq_tags'
+            )
       );
-      return $pushMapping;
+      return $mappings;
+}
+
+function getMirrorUploadPushMapping ( $row ) {
+      $mappings = array(
+            'pushMapping' => array(
+                  'logid' => 'mbq_log_id',
+                  'logtype' => 'mbq_log_type',
+                  'logaction' => 'mbq_log_action',
+                  'logtimestamp' => 'mbq_timestamp',
+                  'loguser' => 'mbq_user', // This will actually be left as zero
+                  'lognamespace' => 'mbq_namespace',
+                  'logusertext' => 'mbq_user_text',
+                  'logtitle' => 'mbq_title',
+                  'logcomment' => 'mbq_comment',
+                  'logparams' => 'mbq_log_params',
+                  'logpage' => 'mbq_page_id',
+                  'logdeleted' => 'mbq_deleted',
+                  'tstags' => 'mbq_tags',
+                  'rcid' => 'mbq_rc_id',
+                  'rcbot' => 'mbq_rc_bot',
+                  'rcpatrolled' => 'mbq_rc_patrolled',
+                  'rctype' => 'mbq_rc_type',
+                  'rcsource' => 'mbq_rc_source',
+                  'rcip' => 'mbq_rc_ip',
+                  'comment2' => 'mbq_comment2', // Comment to use in the null revision
+                  'nullrevid' => 'mbq_rev_id',
+                  'nullrevparentid' => 'mbq_rc_last_oldid',
+                  'metadata' => 'metadata' // This'll be serialized
+            ),
+            'params2Mapping' => array(
+                  'imgtimestamp' => 'img_timestamp',
+                  'imgsize' => 'size',
+                  'imgwidth' => 'width',
+                  'imgheight' => 'height',
+                  'mime' => 'mime',
+                  'imgbits' => 'bitdepth'
+            )
+      );
+      return $mappings;
 }
