@@ -21,12 +21,17 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-// Initialize database
-require_once( 'mirrorInitializeDb.php' );
-require_once( $config->botClassesPath . "/botclasses.php" );
+if ( !isset( $testing ) ) {
+      // Initialize database
+      require_once( 'mirrorInitializeDb.php' );
+      require_once( $config->botClassesPath . "/botclasses.php" );
+      pullIt( $passwordConfig, $config, $db, getopt( 'q:r:s:') );
+}
 
-$botOperations = new botOperations( $passwordConfig, $config, $db, getopt( 'q:r:s:') );
-$botOperations->botLoop();
+function pullIt( $passwordConfig, $config, $db, $par ) {
+      $botOperations = new botOperations( $passwordConfig, $config, $db, $par );
+      $botOperations->botLoop();
+}
 
 class botOperations {
       public $passes = 0; // Which part of the loop are we on?
@@ -153,8 +158,8 @@ class botOperations {
             }
             $events = $ret['query']['recentchanges'];
             $table = 'mb_queue';
-            $dbFields = array_keys ( $this->config->fields['rc'] );
-            $userRow = array_values ( $this->config->fields['rc'] );
+            $dbFields = array_keys( $this->config->fields['rc'] );
+            $userRow = array_values( $this->config->fields['rc'] );
             $row = 'insert into ' . $table . ' ( ' . implode ( ', ', $dbFields ) . ' ) values ';
             $isFirstInEvent = true;
             $events = $ret['query']['recentchanges'];
@@ -441,7 +446,8 @@ class botOperations {
                         // TODO: Begin transaction and commit transaction
                         $query = "INSERT INTO mb_text (mbt_text) VALUES ("
                               . $content . ")";
-                        $status = MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                        $status = MirrorGlobalFunctions::doQuery (
+                              $this->db, $this->config, $query,
                               "inserting text for rev id " . $revision['revid'] );
                         $textId = $this->db->insert_id;
                         // Now update the queue
@@ -636,7 +642,7 @@ class botOperations {
             }
       }
 
-      // Get the null revision ID and comment2. This is used for log entries. For uploads, it's
+      // Get the null revision ID and nullrevcomment. This is used for log entries. For uploads, it's
       // not necessarily a null revision, but we're not given the revision ID, so we have to use
       // this.
       function nullrev() {
@@ -659,6 +665,8 @@ class botOperations {
                   $firstLoop = false;
                   $value = $ret->fetch_assoc();
                   $params = $value['mbq_log_params'];
+                  $unserializedParams2 = MirrorGlobalFunctions::fetchUnserialized(
+                        $value['mbq_params2'] );
                   $status = $this->config->nullRevStatus[$value['mbq_status']];
                   // Page moves sometimes create redirects
                   if ( $value['mbq_status'] == 'needsmovenullrev' ) {
@@ -669,16 +677,17 @@ class botOperations {
                   }
                   $timestamp = MirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
                   $pageId = $value['mbq_page_id'];
-                  $query = "?action=query&prop=revisions&rvprop=comment|ids|content"
-                        . "&pageids=$pageId&rvstart=$timestamp&rvlimit=1&format=php";
+                  $query = "?action=query&prop=revisions&rvprop=comment|ids|content|tags"
+                        . "|size|sha1|timestamp"
+                        . "&pageids=$pageId&rvstart=$timestamp&rvlimit=1&rvdir=newer&format=php";
                   $ret = $this->wiki->query( $query, true );
                   if ( !$ret ) {
                         echo "Did not retrieve any revisions from nullrev query; "
                               . "skipping back around\n";
                         continue;
                   }
-                  // If there's no comment2 in the mb_queue row yet...
-                  if ( !$value['mbq_comment2'] ) {
+                  // If there's no nullrevcomment yet...
+                  if ( !isset( $unserializedParams2['nullrevcomment'] ) ) {
                         if ( !isset( $ret['query']['badrevids'] ) ) {
                               if ( isset( $ret['query']['pages'] ) ) {
                                     $pages = $ret['query']['pages'];
@@ -696,6 +705,12 @@ class botOperations {
                                                       $parentId = $revision['parentid'];
                                                       $content = "'" . $this->db->real_escape_string(
                                                             $revision['*'] ) . "'";
+                                                      $unserializedParams2
+                                                            = MirrorGlobalFunctions::addMoreParams(
+                                                            $this->config, $unserializedParams2,
+                                                            $revision, 'nullrev' );
+                                                      $reserializedParams2
+                                                            = serialize( $unserializedParams2 );
                                                       // Insert the content, and get the ID for that row
                                                       $query = "INSERT INTO mb_text (mbt_text) VALUES ("
                                                             . $content . ")";
@@ -709,9 +724,8 @@ class botOperations {
                                                             . 'mbq_rev_id=' . $thisRevId
                                                             . ",mbq_rc_last_oldid="
                                                                   . $parentId
-                                                            . ",mbq_comment2='"
-                                                                  . $this->db->real_escape_string( $comment )
-                                                            . "',mbq_text_id=$textId"
+                                                            . ",mbq_text_id=$textId"
+                                                            . ",mbq_params2='$reserializedParams2'"
                                                             . ",mbq_status='$status"
                                                             . "' WHERE mbq_id=" . $value['mbq_id'];
                                                       MirrorGlobalFunctions::doQuery( $this->db,
@@ -756,6 +770,8 @@ class botOperations {
                   $firstLoop = false;
                   $value = $ret->fetch_assoc();
                   $params = $value['mbq_log_params'];
+                  $unserializedParams2 = MirrorGlobalFunctions::fetchUnserialized(
+                        $value['mbq_params2'] );
                   if ( $value['mbq_action'] === 'mirrormove' ) {
                         $unserialized = unserialize( $params );
                         $queryCond = 'titles=' . $this->config->namespacesToTruncate
@@ -767,7 +783,7 @@ class botOperations {
                   }
                   $timestamp = MirrorGlobalFunctions::addUndesirables( $value['mbq_timestamp'] );
                   // If there's no redirect revision ID in the mb_queue row yet...
-                  if ( !$value['mbq_rev_id2'] ) {
+                  if ( !isset( $unserializedParams2['redirectrevcomment'] ) ) {
                         // Is there a redirect? If not, break, because there's nothing for us to
                         // do here
                         if ( isset( $unserialized['5::noredir'] )
@@ -780,8 +796,9 @@ class botOperations {
                               continue;
                         }
                         // Get the redirect rev ID
-                        $query = "?action=query&prop=revisions&rvprop=comment|ids|content&"
-                              . "$queryCond&rvstart=$timestamp&rvlimit=1&format=php";
+                        $query = "?action=query&prop=revisions&rvprop=comment|ids|content|tags"
+                              . "|size|sha1|timestamp"
+                              . "$queryCond&rvstart=$timestamp&rvlimit=1&rvdir=newer&format=php";
                         $ret = $this->wiki->query( $query, true );
                         if ( !$ret ) {
                               echo "Did not retrieve any revisions from redirect query; "
@@ -833,7 +850,6 @@ class botOperations {
                                                       return;
                                                 }
                                                 $thisRedirectRevId = $revision['revid'];
-                                                $commentString = '';
                                                 $content = "'" . $this->db->real_escape_string(
                                                       $revision['*'] ) . "'";
                                                 // Insert the content, and get the ID for that row
@@ -845,15 +861,19 @@ class botOperations {
                                                       . $thisRedirectRevId );
                                                 $textId = $this->db->insert_id;
                                                 if ( $value['mbq_action'] === 'mirrormerge' ) {
-                                                      $commentString = ",mbq_comment2='"
-                                                      . $revision['comment']
-                                                      . "',mbq_text_id=$textId";
+                                                      "',mbq_text_id=$textId";
                                                 }
+                                                $unserializedParams2
+                                                      = MirrorGlobalFunctions::addMoreParams(
+                                                      $this->config, $unserializedParams2, $revision,
+                                                      'redirectrev' );
+                                                $reserializedParams2
+                                                      = serialize( $unserializedParams2 );
                                                 // Now update the queue
                                                 $query = 'UPDATE mb_queue SET '
                                                       . 'mbq_rev_id2=' . $thisRedirectRevId
+                                                      . ",mbq_params2='$reserializedParams2'"
                                                       . ',mbq_page_id2=' . $thisRedirectPageId
-                                                      . $commentString
                                                       . ",mbq_status='readytopush'"
                                                       . " WHERE mbq_id=" . $value['mbq_id'];
                                                 $updateMsg = $value['mbq_action'] === 'mirrormove' ?
@@ -887,7 +907,7 @@ class botOperations {
             $imgTimestamp = intval( $params2['img_timestamp'] );
             $query = "?action=query&prop=imageinfo&titles="
                   . $this->config->namespacesToTruncate[$this->wikiName][$value['mbq_namespace']]
-                  . $value['mbq_title']
+                  . MirrorGlobalFunctions::convertSpacesToUnderscores( $value['mbq_title'] )
                   . "&iistart=$imgTimestamp&iiprop=timestamp|user|userid|comment|url|size"
                   . "|sha1|mime|mediatype|metadata|archivename"
                   . "|bitdepth|uploadwarning|contentmodel&format=php";
@@ -957,11 +977,16 @@ class botOperations {
             if ( !isset( $params2['url'] ) ) {
                   die( "URL parameter wasn't set in mbq_id {$value['mbq_id']}\n" );
             }
-            $file = fopen ( $params2['url'], "rb" );
+            $file = fopen( $params2['url'], "rb" );
             // Die if we can't open the remote wiki image file
-            // TODO: Mark it as needsundelete or needsfile instead
             if ( !$file ) {
-                  die( "Couldn't open file {$params2['url']}" );
+                  echo( "Couldn't open file {$params2['url']}" );
+                  $query = 'UPDATE mb_queue SET '
+                              . "mbq_status='needsundeletion'"
+                              . " WHERE mbq_id="
+                              . $value['mbq_id'] . " AND mbq_status='needsimagedownload'";
+                        MirrorGlobalFunctions::doQuery ( $this->db, $this->config, $query,
+                              "marking mbq_id {$value['mbq_id']} as needsundeletion" );
             }
             // Does the remote wiki image URL start with the expected path?
             if ( strpos( $params2['url'], $this->config->stripFromFront[$this->wikiName] )
@@ -969,18 +994,13 @@ class botOperations {
                   die( "Path {$params2['url']} did not start with "
                         . $this->config->stripFromFront[$this->wikiName] . "\n" );
             }
-            // Strip part of the path from the filename
-            $stripped = substr( $params2['url'],
-                  strlen( $this->config->stripFromFront[$this->wikiName] ),
-                  strlen( $params2['url'] )
-                  - strlen( $this->config->stripFromFront[$this->wikiName] ) );
-            // We just want the intermediate stuff, i.e. the image subfolders
-            $strippedOfFilenameToo = substr( $stripped, 0,
-                  strlen( $stripped ) - strlen( $value['mbq_title'] ) );
-            // Add our local path to the filename
-            $createFilename = $this->config->addToFront[$this->wikiName] . $stripped;
+            $data = MirrorGlobalFunctions::convertUrlToPath( $this->config, $params2['url'],
+                  $this->wikiName, $value['mbq_id'] );
+            $createFilename = $data['createfilename'];
+            $dirname = $data['dirname'];
             // Create directory
-            $dirname = $this->config->addToFront[$this->wikiName] . $strippedOfFilenameToo;
+            $dirname = $this->config->addToFront[$this->wikiName]
+                  . $data['strippedoffilenametoo'];
             if ( !file_exists( $dirname ) ) {
                   $newdir = mkdir( $dirname, 0755, true );
                   if ( !$newdir ) {
@@ -992,10 +1012,10 @@ class botOperations {
             if ( !$newf ) {
                   die( "Failure creating file $createFilename\n" );
             }
-            while( !feof($file ) ) {
+            while( !feof( $file ) ) {
                   fwrite( $newf, fread( $file, 1024 * 8 ), 1024 * 8 );
             }
-            if ($file) {
+            if ( $file ) {
                   fclose( $file );
             }
             if ($newf) {

@@ -1,5 +1,6 @@
 <?php
 require_once( 'mirrorInitializeDb.php' );
+$opt = getopt( 's:r:d:' );
 $databases = array( $passwordConfig->dbName, $config->localWikiName, $config->remoteWikiName );
 $commands = array( 'S', 'R', 'D' );
 echo "\nMain menu:\n";
@@ -7,8 +8,15 @@ echo "(S) Save scenario\n";
 echo "(R) Restore scenario\n";
 echo "(D) Delete scenario\n";
 echo "(Q) Quit\n";
-$command = strtoupper( readline( "Command: " ) );
-
+foreach ( $commands as $thisCommand ) {
+    if ( isset( $opt[strtolower( $thisCommand )] ) ) {
+        $command = $thisCommand;
+        $scenario = $opt[strtolower( $thisCommand )];
+    }
+}
+if ( !isset( $command ) ) {
+    $command = strtoupper( readline( "Command: " ) );
+}
 if ( !in_array( $command, $commands ) ) {
     die( "Aborted\n" );
 }
@@ -33,7 +41,9 @@ foreach ( $dirs as $dir ) {
     $names[] = $name;
     echo $name . "\n";
 }
-$scenario = readline( "\nWhich scenario (<return> to abort): " );
+if ( !isset( $scenario ) ) {
+    $scenario = readline( "\nWhich scenario (<return> to abort): " );
+}
 if ( !$scenario ) {
     die ( "Aborted\n" );
 }

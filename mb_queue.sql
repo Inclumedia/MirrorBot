@@ -18,11 +18,9 @@ mbq_params2 blob NULL,
 
 -- log_comment, rc_comment, rev_comment; comment (from api rc)
 mbq_comment VARCHAR(255) BINARY NOT NULL DEFAULT '',
--- rev_comment of null and redirect revisions; applicable to page moves
-mbq_comment2 VARCHAR(255) BINARY NOT NULL DEFAULT '',
 -- log_deleted, rc_deleted, rev_deleted
 mbq_deleted tinyint unsigned NOT NULL default 0,
--- rev_len, rc_new_len; newlen (from api rc)
+-- log_deleted, rc_deleted, rev_deleted
 mbq_len INT,
 -- log_action, rc_logaction; logaction (from api rc)
 mbq_log_action varbinary(255) NULL DEFAULT NULL,

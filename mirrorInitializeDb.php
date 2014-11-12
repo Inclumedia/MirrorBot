@@ -113,7 +113,8 @@ class MirrorGlobalFunctions {
             return $status;
       }
 
-      // This implementation kinda sucks; it just searches for the word "#redirect"
+      // This implementation kinda sucks; it just searches for the word "#redirect" rather than
+      // doing a more rigorous redirect detection
       public static function isRedirect( $config, $text ) {
             return strpos(
                   strtolower( $text ),
@@ -133,5 +134,64 @@ class MirrorGlobalFunctions {
       public static function killUndesirables( $timestamp ) {
             $undesirables = array ( '-', ':', 'T', 'Z' );
             return str_replace ( $undesirables, '', $timestamp );
+      }
+
+      public static function fetchUnserialized( $key ) {
+            if( @unserialize( $key ) === false ) {
+                  return array();
+            } else {
+                  return unserialize( $key );
+            }
+      }
+
+      public static function calculateDeletion( $revision ) {
+            $deleted = 0;
+            if ( isset( $revision['texthidden'] ) ) {
+                  $deleted++;
+            }
+            if ( isset( $revision['commenthidden'] ) ) {
+                  $deleted += 2;
+            }
+            if ( isset( $revision['userhidden' ] ) ) {
+                  $deleted += 4;
+            }
+            return $deleted;
+      }
+
+      // type is either "redirectrev" or "nullrev"
+      public static function addMoreParams( $config, $params, $revision, $type ) {
+            $params[$type === 'nullrev' ? 'nullrevdeleted' : 'redirectrevdeleted']
+                  = MirrorGlobalFunctions::calculateDeletion( $revision );
+            foreach( $revision as $key => $property ) {
+                  if ( isset( $config->addToParams2[$key][$type] ) ) {
+                        $params[$config->addToParams2[$key][$type]] = $property;
+                  }
+            }
+            return $params;
+      }
+
+      public static function convertSpacesToUnderscores( $str ) {
+            return str_replace( ' ', '_', $str );
+      }
+
+      public static function convertUrlToPath( $config, $url, $wikiName, $mbq ) {
+            // Strip part of the path (i.e. stopping at /images/) from the filename
+            $filenameOnly = array_pop( explode( '/', $url ) );
+            $stripped = substr( $url,
+                  strlen( $config->stripFromFront[$wikiName] ),
+                  strlen( $url )
+                  - strlen( $config->stripFromFront[$wikiName] ) );
+            // We just want the intermediate stuff, i.e. the image subfolders
+            $strippedOfFilenameToo = substr( $stripped, 0,
+                  strlen( $stripped ) - strlen( $filenameOnly ) );
+            // Add our local bot path and the mbq_id to the filename
+            $createFilename = $config->addToFront[$wikiName] . $strippedOfFilenameToo
+                  . $mbq . '-' . $filenameOnly;
+            return array(
+                  'createfilename' => $createFilename,
+                  'filenameonly' => $filenameOnly,
+                  'dirname' => $config->addToFront[$wikiName] . $strippedOfFilenameToo,
+                  'strippedoffilenametoo' => $strippedOfFilenameToo
+            );
       }
 }

@@ -5,11 +5,16 @@ class config {
     public $localWikiUrl = array(
         'test116' => "http://localhost/test116/w/api.php"
     );
+    // Used by the pullbot too
     public $remoteWikiUrl = array(
         'test117' => "http://localhost/test117/w/api.php",
         'enwiki' => "https://en.wikipedia.org/w/api.php"
     );
-    public $killFilesCmd = 'sudo rm -rf /var/www/html/test117/w/images/*';
+    public $killFilesCmd = array(
+        'test116' => 'rm -rf /var/www/html/test116/w/images/*',
+        'test117' => 'rm -rf /var/www/html/test117/w/images/*',
+        'mirrorbot' => 'rm -rf /home/nathan/MirrorBot/images/*'
+    );
     // Remote image path
     public $stripFromFront = array(
         'test117' => 'http://localhost/test117/w/images/'
@@ -17,6 +22,9 @@ class config {
     // Local bot image file path
     public $addToFront = array(
         'test117' => '/home/nathan/MirrorBot/images/test117/'
+    );
+    public $tempFilePath = array(
+        'test117' => '/home/nathan/MirrorBot/tempfiles/test117/'
     );
     // a strpos() will use this to determine if the contents have a redirect; kind of an
     // inadequate hack because we're having to hardcode it here for each language. strtolower()
@@ -419,7 +427,8 @@ class config {
         'mirroredit',
         'mirrorlogentry',
         'mirrormerge',
-        'mirrormove'
+        'mirrormove',
+        'mirrorupload'
     );
     // These have revision or null revision text
     public $textActions = array(
@@ -441,11 +450,13 @@ class config {
             'height',
             'url',
             'mime',
-            'meditatype',
+            'mediatype',
             'bitdepth',
-            'metadata'
+            'metadata',
+            'sha1'
         )
     );
+    // PullBot option rotation
     public $optionRotation = array(
         'rc',
         'rev',
@@ -455,6 +466,38 @@ class config {
         'imageinfo',
         'imagedownload',
     );
+    public $addToParams2 = array(
+        'revid' => array(
+            'nullrev' => 'nullrevid',
+            'redirectrev' => 'redirectrevid'
+        ),
+        'parentid' => array(
+            'nullrev' => 'nullrevparentid',
+            'redirectrev' => 'redirectrevparentid'
+        ),
+        'timestamp' => array(
+            'nullrev' => 'nullrevtimestamp',
+            'redirectrev' => 'redirectrevtimestamp'
+        ),
+        'size' => array(
+            'nullrev' => 'nullrevsize',
+            'redirectrev' => 'redirectrevsize'
+        ),
+        'sha1' => array(
+            'nullrev' => 'nullrevsha1',
+            'redirectrev' => 'redirectrevsha1'
+        ),
+        'contentmodel' => array(
+            'nullrev' => 'nullrevcontentmodel',
+            'redirectrev' => 'redirectrevcontentmodel'
+        ),
+        'comment' => array(
+            'nullrev' => 'nullrevcomment',
+            'redirectrev' => 'redirectcomment'
+        )
+    );
+    public $chunkSize = 16384;
+
     function __construct() {
         $this->passwordPath = $this->mirrorBotPath . "passwords/";
         $this->databasesPath = $this->mirrorBotPath . "databases/";
