@@ -7,15 +7,25 @@ require_once( 'mirrorPullBot.php' );
 require_once( 'mirrorPushBot.php' );
 $config = new config();
 require_once( $config->botClassesPath . "/botclasses.php" );
-$wiki = new wikipedia;
-$wiki->setUserAgent( $passwordConfig->userAgent );
-$wiki->url = $config->remoteWikiUrl[$config->remoteWikiName];
-$wiki->login( $passwordConfig->pullUser[$config->remoteWikiName],
+echo "Logging into remote wiki...\n";
+$remoteWiki = new wikipedia;
+$remoteWiki->setUserAgent( $passwordConfig->userAgent );
+$remoteWiki->url = $config->remoteWikiUrl[$config->remoteWikiName];
+$remoteWiki->login( $passwordConfig->pullUser[$config->remoteWikiName],
       $passwordConfig->pullPass[$config->remoteWikiName] );
-$token = urlencode( $wiki->getedittoken() );
 // Some long URLs will cause problems if we try to display the whole thing
-$wiki->__set( 'quiet', 'soft' );
-$wiki->echoRet = true;
+$remoteWiki->__set( 'quiet', 'soft' );
+$remoteWiki->echoRet = true;
+
+echo "Logging into local wiki...\n";
+$localWiki = new wikipedia;
+$localWiki->setUserAgent( $passwordConfig->userAgent );
+$localWiki->url = $config->remoteWikiUrl[$config->remoteWikiName];
+$localWiki->login( $passwordConfig->pullUser[$config->remoteWikiName],
+      $passwordConfig->pullPass[$config->remoteWikiName] );
+
+$localWiki->__set( 'quiet', 'soft' );
+$localWiki->echoRet = true;
 
 // Connect to local database
 $dbLocal = new mysqli( $passwordConfig->host, $passwordConfig->dbUser, $passwordConfig->dbPass );
@@ -40,13 +50,34 @@ echo "Loading empty scenario...\n";
 shell_exec( 'php scenarios.php -r7empty' );
 
 # scen1010
-echo "Scen1010\n";
-echo "Editing " . $config->remoteWikiName . "...\n";
+startTestMsg( "Scen1010" );
+editRemoteMsg();
+
 $ret = $wiki->edit( 'Foo', 'Bar' );
 pullRc( $passwordConfig, $config, $db );
 pullRev( $passwordConfig, $config, $db );
 push( $passwordConfig, $config, $db );
 checkIdenticalTables( $dbLocal, $dbRemote, array( 'revision' ), array( 'rev_text_id' ) );
+endTestMsg( "Scen1010" );
+
+# scen1020
+
+
+function startTestMsg( $text ) {
+    echo "Initiating test $text...\n";
+}
+
+function endTestMsg( $text ) {
+    echo "Completed test $text.\n";
+}
+
+function editLocalMsg( $text ) {
+    echo "Editing " . $config->localWikiName . "...\n";
+}
+
+function editRemoteMsg( $text ) {
+    echo "Editing " . $config->remoteWikiName . "...\n";
+}
 
 function pullRc( $passwordConfig, $config, $db ) {
     echo "Pulling rc...\n";
@@ -75,6 +106,7 @@ function checkIdenticalTables( $dbLocal, $dbRemote, $tables, $exempt = array() )
 	while ( $row ) {
 	    $remoteRow = $remoteRet->fetch_assoc();
 	    if ( !$remoteRow ) {
+		$row = false;
 		continue;
 	    }
 	    $localRow = $localRet->fetch_assoc();
@@ -82,10 +114,12 @@ function checkIdenticalTables( $dbLocal, $dbRemote, $tables, $exempt = array() )
 		die( "Ran out of local rows!\n" );
 	    }
 	    foreach( $remoteRow as $key => $value ) {
-		if ( !isset( $localRow[$key] ) ) {
+		/*if ( !isset( $localRow[$key] ) ) {
 		    #echo $value;
-		    die( "Local is missing field $key\n" );
-		}
+		    echo( "Local is missing field $key\n. Remote:" );
+		    var_dump( $remoteRow );
+		    die();
+		}*/
 		if ( $key === 'rev_user' ) {
 		    if ( $remoteRow['rev_user'] !== $localRow['rev_mt_user'] ) {
 			echo "rev_user doesn't match rev_mt_user! Remote row:\n";
@@ -105,8 +139,8 @@ function checkIdenticalTables( $dbLocal, $dbRemote, $tables, $exempt = array() )
 		}
 	    }
 	}
-	$remoteRet = $dbRemote->fetch_assoc();
-	if ( $remoteRet ) {
+	$remoteRow = $remoteRet->fetch_assoc();
+	if ( $remoteRow ) {
 	    die( "There were superfluous local rows!\n" );
 	}
     }

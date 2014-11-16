@@ -427,7 +427,7 @@ class botOperations {
                                                 $revisionValue = "'" . $this->db->real_escape_string
                                                       ( $revisionValue ) . "'";
                                           }
-                                    $row .= $revisionValue;
+                                          $row .= $revisionValue;
                                     }
                               }
                         }
